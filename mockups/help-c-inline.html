@@ -1,0 +1,46 @@
+<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>Help C: Inline</title>
+<link rel="stylesheet" href="../src/index.css"><style>
+.fakewave { background: repeating-linear-gradient(90deg, color-mix(in srgb, var(--sp1) 55%, transparent) 0 2px, transparent 2px 5px); background-size: 100% 60%; background-repeat: repeat-x; background-position: center; }
+.help-btn { width: 32px; height: 32px; padding: 0; border-radius: 50%; font-weight: 600; }
+.steps { margin: 0; padding: 0; list-style: none; counter-reset: s; display: grid; gap: 12px; }
+.steps li { counter-increment: s; display: grid; grid-template-columns: 28px 1fr; column-gap: 10px; line-height: 1.5; }
+.steps li::before { content: counter(s); grid-row: span 2; width: 24px; height: 24px; border-radius: 50%; background: var(--sel); color: var(--accent); display: grid; place-items: center; font-weight: 600; font-size: 13px; }
+.steps li span { color: var(--muted); }
+.keys { width: 100%; border-collapse: collapse; }
+.keys td { padding: 7px 0; border-bottom: 1px solid var(--line); vertical-align: top; line-height: 1.5; }
+.keys td:first-child { color: var(--muted); padding-right: 16px; width: 40%; }
+.qa h4 { margin: 16px 0 4px; font-size: 14px; }
+.qa p, details p { margin: 0; color: var(--muted); line-height: 1.55; max-width: 70ch; }
+details { border-bottom: 1px solid var(--line); padding: 10px 0; }
+summary { cursor: pointer; font-weight: 600; }
+details p { margin-top: 6px; }
+h3 { font-size: 12px; text-transform: uppercase; letter-spacing: .06em; color: var(--muted); margin: 0 0 12px; }
+
+.pop { position: absolute; right: 16px; top: 52px; width: 400px; max-width: calc(100vw - 32px); background: var(--panel); border: 1px solid var(--line); border-radius: 12px; box-shadow: 0 12px 32px rgba(0,0,0,.16); padding: 14px 16px; z-index: 5; }
+.pop .keys td { padding: 5px 0; font-size: 13px; }
+.pop-foot { display: flex; justify-content: space-between; margin-top: 12px; font-size: 13px; }
+.pop-foot a { color: var(--accent); }
+.divider { text-align: center; color: var(--muted); font-size: 12px; text-transform: uppercase; letter-spacing: .06em; margin: 40px 0 16px; }
+.start { display: grid; grid-template-columns: 1fr 1fr; gap: 24px; width: min(900px, 100%); margin: 0 auto; padding: 0 16px 60px; }
+.start > div { background: var(--panel); border: 1px solid var(--line); border-radius: 14px; padding: 18px 20px; }
+.start .wide { grid-column: 1 / -1; }
+.app.two { display: block; }
+@media (max-width: 700px) { .start { grid-template-columns: 1fr; } }
+.label { font-size: 12px; color: var(--muted); margin: 0 0 8px 16px; }
+</style></head><body><div class="app two"><p class="label" style="margin-top:12px">1. In the editor: the ? button (or ? key) shows a cheat sheet</p>
+<div style="position:relative;height:430px;border:1px solid var(--line);margin:0 16px;overflow:hidden;border-radius:12px;display:grid;grid-template-rows:auto auto 1fr">
+<header class="top"><span class="name">interview.wav</span>
+<div class="search"><input type="search" placeholder="Search transcript"></div>
+<button class="ghost">Undo</button><button class="ghost" disabled>Redo</button><button>Remove fillers (3)</button>
+<div class="menu"><button class="primary">Export</button></div><button class="help-btn" style="background:var(--sel)">?</button></header>
+<section class="timeline"><div class="transport"><button class="play">▶</button><span class="mono muted">0:12 / 0:46</span></div>
+<div class="lane"><div class="lane-head" style="border-left-color:var(--sp1)"><b>Track 1</b><span>interview.wav</span></div><div class="lane-body fakewave"></div></div></section>
+<main class="doc"><div class="doc-inner">
+<div class="para"><div class="para-label">Speaker 1<span class="ts">0:00</span></div><p>Welcome back to the show. Today we are talking about the <span class="w del">um, the</span> coastal walking routes along the north shore.</p></div>
+<div class="para"><div class="para-label">Speaker 2<span class="ts">0:07</span></div><p>Thanks for having me. I have been walking that coast for almost ten years now, and it still surprises me.</p></div>
+<div class="para"><div class="para-label">Speaker 1<span class="ts">0:15</span></div><p>So where should a first timer start?</p></div>
+</div></main>
+<div class="pop"><h3>Shortcuts</h3><table class="keys"><tr><td>Play / pause</td><td><kbd>Space</kbd></td></tr><tr><td>Jump to a word</td><td>Click the word</td></tr><tr><td>Jump to a moment</td><td>Click the waveform</td></tr><tr><td>Select a range</td><td><kbd>Shift</kbd> + click</td></tr><tr><td>Cut the selection</td><td><kbd>Delete</kbd> or <kbd>Backspace</kbd></td></tr><tr><td>Undo / redo</td><td><kbd>⌘Z</kbd> / <kbd>⇧⌘Z</kbd></td></tr><tr><td>Move a passage</td><td>Select, <kbd>⌘X</kbd>, click the word it goes before, <kbd>⌘V</kbd></td></tr><tr><td>Search</td><td><kbd>⌘F</kbd>, then <kbd>Enter</kbd> / <kbd>⇧Enter</kbd> for next / previous</td></tr><tr><td>Clear selection or search</td><td><kbd>Esc</kbd></td></tr><tr><td>Open this help</td><td><kbd>?</kbd></td></tr></table><div class="pop-foot"><span class="muted">Ctrl instead of ⌘ on Windows</span><a href="#">How it works and FAQ</a></div></div></div>
+<p class="label" style="margin-top:28px">2. On the start screen: how it works and FAQ under the drop zone</p>
+<div class="empty" style="display:block;padding-top:0"><div class="drop" style="margin:0 auto"><h1>Drop an audio file to start</h1><p>MP3, WAV or M4A. It is transcribed and edited on this computer: nothing is uploaded.</p><button class="primary">Choose audio file</button></div></div>
+<div class="start" style="margin-top:24px"><div><h3>How it works</h3><ol class="steps"><li><b>Open a file</b><span>Drop an MP3, WAV or M4A onto the page, or click <b>Choose audio file</b>.</span></li><li><b>Wait for the transcript</b><span>It is made on this computer. The first time, the speech model downloads once.</span></li><li><b>Edit the text</b><span>Select words and press <kbd>Delete</kbd>. They are cut from the audio too.</span></li><li><b>Export</b><span>Play it back to check, then <b>Export</b> as MP3 or WAV.</span></li></ol></div><div><h3>Shortcuts</h3><table class="keys"><tr><td>Play / pause</td><td><kbd>Space</kbd></td></tr><tr><td>Jump to a word</td><td>Click the word</td></tr><tr><td>Jump to a moment</td><td>Click the waveform</td></tr><tr><td>Select a range</td><td><kbd>Shift</kbd> + click</td></tr><tr><td>Cut the selection</td><td><kbd>Delete</kbd> or <kbd>Backspace</kbd></td></tr><tr><td>Undo / redo</td><td><kbd>⌘Z</kbd> / <kbd>⇧⌘Z</kbd></td></tr><tr><td>Move a passage</td><td>Select, <kbd>⌘X</kbd>, click the word it goes before, <kbd>⌘V</kbd></td></tr><tr><td>Search</td><td><kbd>⌘F</kbd>, then <kbd>Enter</kbd> / <kbd>⇧Enter</kbd> for next / previous</td></tr><tr><td>Clear selection or search</td><td><kbd>Esc</kbd></td></tr><tr><td>Open this help</td><td><kbd>?</kbd></td></tr></table></div><div class="wide"><h3>Questions</h3><details open><summary>Is my audio uploaded anywhere?</summary><p>No. Transcription, editing and export all run in your browser. The only download is the speech model, once.</p></details><details><summary>Does editing change my original file?</summary><p>No. The original is never touched. Cuts are applied when you export, and you can undo at any time.</p></details><details><summary>Why is the first transcript slow?</summary><p>The speech model (40 to 250 MB) downloads the first time. After that it is cached. For more speed, pick the Fastest model or try the GPU engine before opening a file.</p></details><details><summary>Remove fillers missed some "um"s. Why?</summary><p>The speech model often leaves fillers out of the transcript, so there is no word to remove. Listen, then select the words around it and cut by hand.</p></details><details><summary>A cut sounds abrupt. What can I do?</summary><p>Cuts snap to the nearest quiet moment and fade over 8 ms. If two words run together, cut one word more or less, or undo and try a slightly different range.</p></details><details><summary>Which speech model should I pick?</summary><p>Balanced suits most English recordings. Most accurate is slower but better with accents and noise. Use Multilingual for other languages.</p></details><details><summary>MP3 or WAV?</summary><p>MP3 (192 kbps) is small and good for sharing. WAV is full quality, best if you will edit it further elsewhere.</p></details><details><summary>Is my work saved?</summary><p>Not yet. Closing the tab loses your edits, so export before you leave.</p></details><details><summary>Can I add a second file or track?</summary><p>Not yet. Dropping a new file replaces the current one (it asks first). Multitrack is planned.</p></details><details><summary>Which browser should I use?</summary><p>Chrome or Edge. Other browsers may work but are untested.</p></details></div></div></div></body></html>

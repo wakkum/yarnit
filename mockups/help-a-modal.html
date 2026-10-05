@@ -1,0 +1,41 @@
+<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>Help A: Modal</title>
+<link rel="stylesheet" href="../src/index.css"><style>
+.fakewave { background: repeating-linear-gradient(90deg, color-mix(in srgb, var(--sp1) 55%, transparent) 0 2px, transparent 2px 5px); background-size: 100% 60%; background-repeat: repeat-x; background-position: center; }
+.help-btn { width: 32px; height: 32px; padding: 0; border-radius: 50%; font-weight: 600; }
+.steps { margin: 0; padding: 0; list-style: none; counter-reset: s; display: grid; gap: 12px; }
+.steps li { counter-increment: s; display: grid; grid-template-columns: 28px 1fr; column-gap: 10px; line-height: 1.5; }
+.steps li::before { content: counter(s); grid-row: span 2; width: 24px; height: 24px; border-radius: 50%; background: var(--sel); color: var(--accent); display: grid; place-items: center; font-weight: 600; font-size: 13px; }
+.steps li span { color: var(--muted); }
+.keys { width: 100%; border-collapse: collapse; }
+.keys td { padding: 7px 0; border-bottom: 1px solid var(--line); vertical-align: top; line-height: 1.5; }
+.keys td:first-child { color: var(--muted); padding-right: 16px; width: 40%; }
+.qa h4 { margin: 16px 0 4px; font-size: 14px; }
+.qa p, details p { margin: 0; color: var(--muted); line-height: 1.55; max-width: 70ch; }
+details { border-bottom: 1px solid var(--line); padding: 10px 0; }
+summary { cursor: pointer; font-weight: 600; }
+details p { margin-top: 6px; }
+h3 { font-size: 12px; text-transform: uppercase; letter-spacing: .06em; color: var(--muted); margin: 0 0 12px; }
+
+.scrim { position: fixed; inset: 0; background: rgba(0,0,0,.35); display: grid; place-items: center; padding: 16px; }
+.modal { background: var(--panel); border-radius: 14px; width: min(620px, 100%); max-height: 85vh; display: flex; flex-direction: column; box-shadow: 0 20px 60px rgba(0,0,0,.25); }
+.modal-head { display: flex; align-items: center; padding: 14px 18px 0; }
+.modal-head h2 { font-size: 16px; margin: 0 auto 0 0; }
+.tabs { display: flex; gap: 4px; padding: 12px 18px 0; border-bottom: 1px solid var(--line); }
+.tabs button { border: 0; border-radius: 0; background: none; padding: 8px 10px; color: var(--muted); border-bottom: 2px solid transparent; }
+.tabs button.on { color: var(--fg); border-bottom-color: var(--accent); font-weight: 600; }
+.modal-body { padding: 16px 18px 20px; overflow: auto; }
+</style></head><body><div class="app">
+<header class="top"><span class="name">interview.wav</span>
+<div class="search"><input type="search" placeholder="Search transcript"></div>
+<button class="ghost">Undo</button><button class="ghost" disabled>Redo</button><button>Remove fillers (3)</button>
+<div class="menu"><button class="primary">Export</button></div><button class="help-btn">?</button></header>
+<section class="timeline"><div class="transport"><button class="play">▶</button><span class="mono muted">0:12 / 0:46</span></div>
+<div class="lane"><div class="lane-head" style="border-left-color:var(--sp1)"><b>Track 1</b><span>interview.wav</span></div><div class="lane-body fakewave"></div></div></section>
+<main class="doc"><div class="doc-inner">
+<div class="para"><div class="para-label">Speaker 1<span class="ts">0:00</span></div><p>Welcome back to the show. Today we are talking about the <span class="w del">um, the</span> coastal walking routes along the north shore.</p></div>
+<div class="para"><div class="para-label">Speaker 2<span class="ts">0:07</span></div><p>Thanks for having me. I have been walking that coast for almost ten years now, and it still surprises me.</p></div>
+<div class="para"><div class="para-label">Speaker 1<span class="ts">0:15</span></div><p>So where should a first timer start?</p></div>
+</div></main>
+<div class="scrim"><div class="modal"><div class="modal-head"><h2>How to use Yarnit</h2><button class="ghost">✕</button></div>
+<div class="tabs"><button>Getting started</button><button class="on">Shortcuts</button><button>FAQ</button></div>
+<div class="modal-body"><table class="keys"><tr><td>Play / pause</td><td><kbd>Space</kbd></td></tr><tr><td>Jump to a word</td><td>Click the word</td></tr><tr><td>Jump to a moment</td><td>Click the waveform</td></tr><tr><td>Select a range</td><td><kbd>Shift</kbd> + click</td></tr><tr><td>Cut the selection</td><td><kbd>Delete</kbd> or <kbd>Backspace</kbd></td></tr><tr><td>Undo / redo</td><td><kbd>⌘Z</kbd> / <kbd>⇧⌘Z</kbd></td></tr><tr><td>Move a passage</td><td>Select, <kbd>⌘X</kbd>, click the word it goes before, <kbd>⌘V</kbd></td></tr><tr><td>Search</td><td><kbd>⌘F</kbd>, then <kbd>Enter</kbd> / <kbd>⇧Enter</kbd> for next / previous</td></tr><tr><td>Clear selection or search</td><td><kbd>Esc</kbd></td></tr><tr><td>Open this help</td><td><kbd>?</kbd></td></tr></table><p class="muted" style="margin:14px 0 0;font-size:13px">On Windows, use <kbd>Ctrl</kbd> instead of <kbd>⌘</kbd>.</p></div></div></div></div></body></html>

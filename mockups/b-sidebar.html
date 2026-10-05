@@ -1,0 +1,127 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Mockup B: Sidebar</title>
+<style>
+/* Shared tokens for the layout mockups. Throwaway. */
+:root {
+  --bg: #fbfaf8;
+  --panel: #ffffff;
+  --fg: #1c1b1a;
+  --muted: #76716b;
+  --line: #e6e2dc;
+  --accent: #2f6fde;
+  --sel: #d6e4ff;
+  --hit: #ffe9a8;
+  --cur: #2f6fde;
+  --cut: rgba(214, 64, 64, 0.14);
+  --sp1: #2f6fde;
+  --sp2: #c2620f;
+  font-family: Inter, system-ui, -apple-system, sans-serif;
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #151514;
+    --panel: #1d1d1b;
+    --fg: #ecebe8;
+    --muted: #9a958e;
+    --line: #2e2d2a;
+    --accent: #6b9bff;
+    --sel: #23406f;
+    --hit: #5b4a12;
+    --cur: #6b9bff;
+    --cut: rgba(230, 90, 90, 0.2);
+    --sp1: #6b9bff;
+    --sp2: #f0974a;
+  }
+}
+* { box-sizing: border-box; }
+body { margin: 0; background: var(--bg); color: var(--fg); font-size: 14px; }
+button { font: inherit; color: inherit; background: var(--panel); border: 1px solid var(--line); border-radius: 8px; padding: 6px 12px; cursor: pointer; }
+button.primary { background: var(--accent); border-color: var(--accent); color: #fff; }
+button.ghost { border-color: transparent; background: transparent; }
+input.search { font: inherit; color: inherit; background: var(--panel); border: 1px solid var(--line); border-radius: 8px; padding: 6px 10px; width: 240px; }
+.muted { color: var(--muted); }
+.mono { font-variant-numeric: tabular-nums; }
+.chip { display: inline-flex; align-items: center; gap: 6px; padding: 2px 8px; border-radius: 99px; border: 1px solid var(--line); font-size: 12px; }
+
+/* transcript */
+.para p { margin: 0; font-size: 17px; line-height: 1.75; max-width: 70ch; }
+.para.header { margin-bottom: 22px; }
+.para.side { display: grid; grid-template-columns: 88px 1fr; gap: 16px; margin-bottom: 20px; }
+.sp { display: flex; align-items: center; gap: 8px; font-weight: 600; font-size: 13px; margin-bottom: 4px; }
+.sp .dot { width: 8px; height: 8px; border-radius: 50%; }
+.sp-side { display: flex; flex-direction: column; font-weight: 600; font-size: 13px; padding-top: 4px; }
+.ts { color: var(--muted); font-weight: 400; font-size: 12px; margin-left: 4px; }
+.sp-side .ts { margin-left: 0; }
+.w { border-radius: 3px; padding: 0 1px; }
+.w.del { text-decoration: line-through; color: var(--muted); opacity: 0.7; }
+.w.fill { font-style: italic; color: var(--muted); text-decoration: line-through; }
+.w.sel { background: var(--sel); }
+.w.hit { background: var(--hit); }
+.w.cur { box-shadow: inset 0 -2px 0 var(--cur); }
+</style>
+<style>
+  body { display: grid; grid-template-columns: 1fr 300px; grid-template-rows: auto 1fr auto; height: 100vh; }
+  .top { grid-column: 1 / -1; display: flex; align-items: center; gap: 10px; padding: 10px 20px; border-bottom: 1px solid var(--line); background: var(--panel); }
+  .top .name { font-weight: 600; margin-right: auto; }
+  .doc { overflow: auto; padding: 28px 32px; }
+  aside { border-left: 1px solid var(--line); background: var(--panel); overflow: auto; padding: 16px; display: flex; flex-direction: column; gap: 22px; }
+  aside h3 { font-size: 11px; text-transform: uppercase; letter-spacing: .06em; color: var(--muted); margin: 0 0 10px; }
+  .row { display: flex; align-items: center; gap: 8px; padding: 6px 0; }
+  .row .grow { flex: 1; }
+  .hit-item { padding: 8px; border-radius: 8px; border: 1px solid var(--line); margin-bottom: 6px; font-size: 13px; line-height: 1.4; }
+  .hit-item mark { background: var(--hit); color: inherit; border-radius: 3px; }
+  .hit-item.active { border-color: var(--accent); }
+  .mini { width: 60px; }
+  .bottom { grid-column: 1 / -1; display: flex; align-items: center; gap: 14px; padding: 8px 20px; border-top: 1px solid var(--line); background: var(--panel); }
+  .play { width: 36px; height: 36px; border-radius: 50%; padding: 0; background: var(--accent); color: #fff; border: 0; flex: none; }
+  .overview { flex: 1; color: var(--muted); }
+  select { font: inherit; color: inherit; background: var(--panel); border: 1px solid var(--line); border-radius: 8px; padding: 5px 8px; }
+</style>
+</head>
+<body>
+  <header class="top">
+    <span class="name">Field Notes ep. 12 <span class="muted">· saved</span></span>
+    <button class="ghost">Undo</button>
+    <button class="ghost">Redo</button>
+    <button>Remove fillers (3)</button>
+    <button>Shorten pauses</button>
+    <button class="primary">Export</button>
+  </header>
+
+  <main class="doc"><div id="t"><div class="para side"><div class="sp-side"><span style="color:var(--sp1)">Sara</span><span class="ts">0:00</span></div><p><span class="w">Welcome</span> <span class="w">back</span> <span class="w">to</span> <span class="w">Field</span> <span class="w">Notes.</span> <span class="w">Today</span> <span class="w">I</span> <span class="w">have</span> <span class="w">Omar</span> <span class="w">with</span> <span class="w">me,</span> <span class="w">who</span> <span class="w">spent,</span> <span class="w fill">um,</span> <span class="w">three</span> <span class="w">months</span> <span class="w">reporting</span> <span class="w">from</span> <span class="w">the</span> <span class="w">coast.</span></p></div><div class="para side"><div class="sp-side"><span style="color:var(--sp2)">Omar</span><span class="ts">0:09</span></div><p><span class="w">Thanks</span> <span class="w">for</span> <span class="w">having</span> <span class="w">me.</span> <span class="w">It</span> <span class="w">was,</span> <span class="w fill">uh,</span> <span class="w">it</span> <span class="w">was</span> <span class="w">a</span> <span class="w">long</span> <span class="w">trip,</span> <span class="w">but</span> <span class="w">honestly</span> <span class="w">the</span> <span class="w">most</span> <span class="w hit">interesting</span> <span class="w">story</span> <span class="w">I</span> <span class="w">have</span> <span class="w">worked</span> <span class="w">on.</span></p></div><div class="para side"><div class="sp-side"><span style="color:var(--sp1)">Sara</span><span class="ts">0:17</span></div><p><span class="w">Let</span> <span class="w">us</span> <span class="w">start</span> <span class="w">with</span> <span class="w">the</span> <span class="w">fishing</span> <span class="w">communities.</span> <span class="w">What</span> <span class="w">did</span> <span class="w">you</span> <span class="w cur">see</span> <span class="w">when</span> <span class="w">you</span> <span class="w">first</span> <span class="w">arrived?</span></p></div><div class="para side"><div class="sp-side"><span style="color:var(--sp2)">Omar</span><span class="ts">0:23</span></div><p><span class="w del">So</span> <span class="w del">the</span> <span class="w del">first</span> <span class="w del">day</span> <span class="w del">we</span> <span class="w del">got</span> <span class="w del">lost.</span> <span class="w">The</span> <span class="w">first</span> <span class="w">thing</span> <span class="w">you</span> <span class="w">notice</span> <span class="w">is</span> <span class="w">how</span> <span class="w">quiet</span> <span class="w">the</span> <span class="w">harbour</span> <span class="w">is.</span> <span class="w">Half</span> <span class="w">the</span> <span class="w">boats</span> <span class="w">never</span> <span class="w">leave</span> <span class="w">anymore,</span> <span class="w">and</span> <span class="w">the</span> <span class="w">people</span> <span class="w">who</span> <span class="w">stay</span> <span class="w">are</span> <span class="w">mostly</span> <span class="w">over</span> <span class="w">sixty.</span></p></div><div class="para side"><div class="sp-side"><span style="color:var(--sp1)">Sara</span><span class="ts">0:38</span></div><p><span class="w">That</span> <span class="w">is</span> <span class="w">striking.</span> <span class="w">Is</span> <span class="w">that</span> <span class="w">because</span> <span class="w">of</span> <span class="w">the</span> <span class="w">new</span> <span class="w">regulations,</span> <span class="w">or</span> <span class="w">is</span> <span class="w">it</span> <span class="w">more</span> <span class="w">of</span> <span class="w">a,</span> <span class="w">you</span> <span class="w">know,</span> <span class="w">economic</span> <span class="w">thing?</span></p></div><div class="para side"><div class="sp-side"><span style="color:var(--sp2)">Omar</span><span class="ts">0:46</span></div><p><span class="w">Both,</span> <span class="w">really.</span> <span class="w">The</span> <span class="w">regulations</span> <span class="w">made</span> <span class="w">it</span> <span class="w">expensive,</span> <span class="w">and</span> <span class="w">the</span> <span class="w hit sel">interesting</span> <span class="w sel">part</span> <span class="w sel">is</span> <span class="w sel">that</span> <span class="w sel">nobody</span> <span class="w sel">planned</span> <span class="w sel">for</span> <span class="w sel">what</span> <span class="w sel">came</span> <span class="w sel">after.</span> <span class="w">Young</span> <span class="w">people</span> <span class="w">moved</span> <span class="w">to</span> <span class="w">the</span> <span class="w">city.</span></p></div><div class="para side"><div class="sp-side"><span style="color:var(--sp1)">Sara</span><span class="ts">0:58</span></div><p><span class="w fill">Hmm.</span> <span class="w">And</span> <span class="w">what</span> <span class="w">about</span> <span class="w">the</span> <span class="w">families</span> <span class="w">who</span> <span class="w">stayed</span> <span class="w">behind?</span></p></div></div></main>
+
+  <aside>
+    <section>
+      <h3>Search</h3>
+      <input class="search" style="width:100%" value="interesting" />
+      <div class="row muted" style="font-size:12px"><span class="grow">2 matches</span><button class="ghost">Delete all</button></div>
+      <div class="hit-item"><b>Omar</b> 0:12 · ...the most <mark>interesting</mark> story I have...</div>
+      <div class="hit-item active"><b>Omar</b> 0:49 · ...and the <mark>interesting</mark> part is that...</div>
+    </section>
+    <section>
+      <h3>Tracks and speakers</h3>
+      <div class="row"><span class="chip"><span style="width:8px;height:8px;border-radius:50%;background:var(--sp1)"></span>Sara</span><span class="grow muted">sara-mic.wav</span><input class="mini" type="range" value="80" /></div>
+      <div class="row"><span class="chip"><span style="width:8px;height:8px;border-radius:50%;background:var(--sp2)"></span>Omar</span><span class="grow muted">omar-mic.wav</span><input class="mini" type="range" value="70" /></div>
+      <button class="ghost" style="padding-left:0">+ Add track</button>
+    </section>
+    <section>
+      <h3>Export</h3>
+      <div class="row"><span class="grow">Format</span><select><option>MP3 192 kbps</option><option>WAV 16-bit</option></select></div>
+      <div class="row"><span class="grow">Tracks</span><select><option>Mixed</option><option>Separate files</option></select></div>
+      <div class="row muted"><span class="grow">Length</span><span class="mono">0:58</span></div>
+    </section>
+  </aside>
+
+  <footer class="bottom">
+    <button class="play">▶</button>
+    <span class="mono">0:17 / 0:58</span>
+    <div class="overview" id="ov"><svg viewBox="0 0 800 30" preserveAspectRatio="none" width="100%" height="30"><rect x="284" y="0" width="60.00000000000001" height="30" fill="var(--cut)" /><rect x="92" y="0" width="7.9999999999999964" height="30" fill="var(--cut)" /><rect x="128" y="0" width="8.000000000000007" height="30" fill="var(--cut)" /><rect x="708" y="0" width="12.00000000000001" height="30" fill="var(--cut)" /><path d="M1 13.69992369289972V16.30007630710028M4 12.341627677383826V17.658372322616174M7 11.859385030302088V18.14061496969791M10 12.663227715989988V17.33677228401001M13 11.32230010323408V18.677699896765922M16 12.615446011716742V17.38455398828326M19 11.84345038461275V18.156549615387252M22 10.935852598122484V19.064147401877516M25 10.656675387614222V19.34332461238578M28 9.331102229533064V20.668897770466934M31 8.287883408162305V21.712116591837695M34 9.835264696433805V20.164735303566196M37 11.90207629868269V18.09792370131731M40 12.235722025734473V17.76427797426553M43 12.509724696377573V17.490275303622425M46 12.393506280061013V17.606493719938985M49 12.121022537581851V17.87897746241815M52 12.396811505658057V17.603188494341943M55 7.778398066733555V22.221601933266445M58 9.626575012051063V20.373424987948937M61 10.424510774212798V19.5754892257872M64 7.725897908398989V22.274102091601012M67 3.790436885312248V26.209563114687754M70 5.66710305063498V24.332896949365022M73 8.75816997109079V21.24183002890921M76 6.429176660280321V23.57082333971968M79 8.261806653845856V21.738193346154144M82 10.164792224873377V19.835207775126623M85 11.885557806488317V18.114442193511685M88 11.424733127628095V18.575266872371905M91 12.506086983704966V17.493913016295032M94 10.18725696365284V19.812743036347157M97 10.673753592082882V19.326246407917118M100 10.05084200592091V19.94915799407909M103 6.419713791147272V23.580286208852726M106 5.768556788982314V24.231443211017684M109 8.769459410376864V21.230540589623136M112 3.849045758236409V26.150954241763593M115 2.641900121907417V27.35809987809258M118 4.122254615967908V25.877745384032092M121 8.946426170325623V21.053573829674377M124 5.619639116663235V24.380360883336763M127 8.58805042500543V21.41194957499457M130 9.300988258566694V20.699011741433306M133 12.324571672565172V17.675428327434826M136 12.861293290208902V17.138706709791098M139 12.457853685688715V17.542146314311285M142 10.66812460630748V19.33187539369252M145 10.147635231512359V19.85236476848764M148 10.534104764500766V19.465895235499232M151 6.587724877141932V23.41227512285807M154 8.927841099356108V21.072158900643892M157 10.125854207913973V19.874145792086026M160 9.313860788487279V20.68613921151272M163 7.574630739627699V22.4253692603723M166 8.137279671884736V21.862720328115266M169 10.592229978514718V19.407770021485284M172 11.054385594332622V18.945614405667378M175 11.555902553251357V18.444097446748643M178 12.750956995323165V17.249043004676835M181 12.605653198064807V17.394346801935193M184 12.225827095974736V17.774172904025264M187 11.844182367712325V18.155817632287675M190 11.72273241980906V18.27726758019094M193 10.924503908563597V19.075496091436403M196 12.275604028820462V17.724395971179536M199 12.832953480916935V17.167046519083065M202 12.766916901757968V17.23308309824203M205 11.8167295382659V18.1832704617341M208 12.405532098559094V17.594467901440908M211 11.862020293894489V18.13797970610551M214 10.613741027670883V19.386258972329117M217 12.129007719741534V17.870992280258466M220 11.82894194830178V18.17105805169822M223 12.010315869293507V17.989684130706493M226 12.980709023568513V17.019290976431485M229 11.490581175337997V18.509418824662003M232 12.112817346899563V17.88718265310044M235 9.43681619924263V20.563183800757372M238 8.333480204260699V21.6665197957393M241 11.003338913757077V18.996661086242923M244 7.973723021657331V22.02627697834267M247 10.697566582823399V19.3024334171766M250 8.422081111356V21.577918888644M253 9.05334230466872V20.946657695331282M256 10.392015342195249V19.60798465780475M259 7.98504537449323V22.01495462550677M262 9.1120518453159V20.8879481546841M265 8.807356221155777V21.19264377884422M268 11.946335392719497V18.053664607280503M271 13.158769874434768V16.841230125565232M274 11.026648377187918V18.973351622812082M277 8.738355710590815V21.261644289409183M280 8.319339459791568V21.680660540208432M283 4.776890206411226V25.223109793588776M286 8.71861844411649V21.28138155588351M289 9.554435694493542V20.44556430550646M292 8.247536587933023V21.752463412066977M295 7.205092659182967V22.794907340817034M298 9.500603503594016V20.499396496405986M301 5.738710267987889V24.26128973201211M304 8.89557135624029V21.10442864375971M307 9.373905075132495V20.626094924867505M310 8.76674928247548V21.23325071752452M313 10.956411172513821V19.04358882748618M316 11.514608184673227V18.48539181532677M319 12.6600168925325V17.3399831074675M322 11.24674645980576V18.75325354019424M325 7.735800818522429V22.264199181477572M328 7.87437607429279V22.12562392570721M331 5.403765403731933V24.59623459626807M334 5.270945510777093V24.729054489222907M337 5.026615509822086V24.973384490177914M340 7.477145049271428V22.522854950728572M343 10.023079559962978V19.97692044003702M346 10.005552291601422V19.994447708398578M349 7.720995469516461V22.27900453048354M352 11.965662767213738V18.034337232786264M355 10.896699705514564V19.103300294485436M358 11.729569935272462V18.270430064727538M361 12.548365497468538V17.451634502531462M364 12.038061801336209V17.96193819866379M367 12.696151694704566V17.303848305295432M370 12.226014346456513V17.773985653543487M373 11.814925725685725V18.185074274314275M376 10.091515373064368V19.908484626935632M379 9.634666612822276V20.365333387177724M382 11.745714830651401V18.2542851693486M385 9.547307956689595V20.452692043310407M388 11.069488900869516V18.930511099130484M391 11.933078603462395V18.066921396537605M394 12.720132107939985V17.279867892060015M397 11.888751972957634V18.111248027042368M400 12.838662111759728V17.161337888240272M403 11.869785255937769V18.13021474406223M406 11.82582364790085V18.174176352099153M409 12.518890332718328V17.48110966728167M412 11.655189448604382V18.344810551395618M415 10.650211733920294V19.349788266079706M418 12.229736492831943V17.770263507168057M421 9.349056366441218V20.650943633558782M424 9.416211300062287V20.583788699937713M427 8.953054745538644V21.046945254461356M430 8.82434543522737V21.17565456477263M433 7.928581476171999V22.071418523828M436 11.880767668862541V18.119232331137457M439 9.297209047868048V20.702790952131952M442 9.43921263457446V20.56078736542554M445 12.07736763483804V17.92263236516196M448 12.29970759520075V17.70029240479925M451 12.73934328471768V17.26065671528232M454 10.314785869299904V19.685214130700096M457 9.692363120465124V20.307636879534876M460 6.723276202220273V23.276723797779727M463 7.724854735388906V22.275145264611094M466 9.783896865203308V20.21610313479669M469 6.039876135319979V23.96012386468002M472 8.399457724087263V21.600542275912737M475 9.441895083761942V20.558104916238058M478 10.26334776859348V19.73665223140652M481 9.139353018034281V20.86064698196572M484 8.954245103318257V21.045754896681743M487 7.160630269867282V22.839369730132717M490 12.406971511092381V17.59302848890762M493 12.87465664588551V17.12534335411449M496 12.076987873314293V17.923012126685705M499 12.050884138458745V17.949115861541255M502 8.366082202732503V21.633917797267497M505 6.835316828197648V23.164683171802352M508 10.238456090518511V19.76154390948149M511 5.447587884441255V24.552412115558745M514 6.716185192497305V23.283814807502694M517 6.379176626023487V23.620823373976513M520 3.972354798410212V26.027645201589788M523 7.81315652825633V22.18684347174367M526 5.469531182007694V24.530468817992308M529 9.82632673805838V20.17367326194162M532 8.84014082625621V21.15985917374379M535 9.382490521951008V20.617509478048994M538 12.651362033850038V17.348637966149962M541 11.557238929096076V18.442761070903924M544 11.870823654463232V18.12917634553677M547 12.028797794639804V17.971202205360196M550 8.619659161358872V21.38034083864113M553 10.131572423064089V19.86842757693591M556 10.905538684490116V19.094461315509882M559 9.080619980120677V20.919380019879323M562 8.430339677395175V21.569660322604825M565 10.296723536049901V19.703276463950097M568 10.432264029410184V19.567735970589816M571 10.70923807317798V19.29076192682202M574 10.644456024405052V19.355543975594948M577 12.936979865751812V17.063020134248188M580 13.06128709694383V16.93871290305617M583 11.923725854206218V18.076274145793782M586 12.932827352298169V17.06717264770183M589 11.672156853503026V18.327843146496974M592 12.97604912980411V17.02395087019589M595 12.91330103133879V17.08669896866121M598 13.189687917523974V16.810312082476027M601 12.684778102614974V17.315221897385026M604 12.55349541228463V17.44650458771537M607 11.226985080237895V18.773014919762105M610 11.24166225206589V18.75833774793411M613 12.402017265507084V17.597982734492916M616 11.737894749664338V18.26210525033566M619 11.02813927746162V18.97186072253838M622 11.52012344391085V18.479876556089152M625 11.982165844711531V18.01783415528847M628 13.409170096931225V16.590829903068773M631 11.518370462343231V18.48162953765677M634 12.01959434780764V17.98040565219236M637 11.97601558487306V18.02398441512694M640 9.540334266615087V20.459665733384913M643 10.156678980057759V19.84332101994224M646 8.359136271998144V21.640863728001854M649 11.134706535881165V18.865293464118835M652 7.756559403828991V22.24344059617101M655 6.580310542640845V23.419689457359155M658 10.430865519058681V19.56913448094132M661 8.802592472927728V21.197407527072272M664 8.422184596079251V21.57781540392075M667 10.731794919680999V19.268205080319M670 11.600058267807412V18.399941732192588M673 12.054272825873332V17.94572717412667M676 12.08632199192709V17.91367800807291M679 11.234678998653346V18.765321001346656M682 9.800975407249396V20.199024592750604M685 5.33321727767723V24.666782722322772M688 6.709704221178622V23.290295778821378M691 7.770932806488718V22.229067193511284M694 6.4619340527334455V23.538065947266553M697 4.2225864808672995V25.7774135191327M700 4.598778244197895V25.401221755802105M703 8.360430401187966V21.639569598812034M706 4.379196822106392V25.620803177893606M709 10.738338464854788V19.261661535145212M712 10.782552003268707V19.217447996731295M715 10.557041725159369V19.44295827484063M718 12.050401813805014V17.949598186194986M721 12.09643383725362V17.90356616274638M724 11.696071756806855V18.303928243193145M727 10.16689835058197V19.83310164941803M730 11.05361841399801V18.94638158600199M733 5.656800402827315V24.343199597172685M736 10.180604767960862V19.819395232039138M739 3.680287102499152V26.31971289750085M742 5.343519839209366V24.656480160790636M745 9.73035609147685V20.26964390852315M748 10.54963396970454V19.45036603029546M751 11.445712816618409V18.554287183381593M754 11.93815532760448V18.06184467239552M757 9.233848338217708V20.766151661782292M760 11.154566137384432V18.845433862615568M763 12.247019478728433V17.752980521271567M766 13.181571397222568V16.81842860277743M769 11.784371997576212V18.215628002423788M772 11.35093533570371V18.64906466429629M775 12.442096169268495V17.557903830731505M778 11.761200381455657V18.238799618544345M781 10.402157591993468V19.59784240800653M784 12.04191802140856V17.95808197859144M787 11.115236285665903V18.8847637143341M790 11.660730630444517V18.33926936955548M793 10.873206974973797V19.126793025026203M796 12.99727771876807V17.002722281231932" stroke="currentColor" stroke-width="2" fill="none" opacity="0.85"/><line x1="231.99999999999997" x2="231.99999999999997" y1="0" y2="30" stroke="var(--accent)" stroke-width="2"/></svg></div>
+  </footer>
+
+
+</body>
+</html>

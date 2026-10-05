@@ -1,0 +1,42 @@
+# Logs
+logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+lerna-debug.log*
+
+node_modules
+dist
+dist-ssr
+*.local
+
+# Editor directories and files
+.vscode/*
+!.vscode/extensions.json
+.idea
+.DS_Store
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.sw?
+
+# From base-project-template: secrets & keys
+.env
+.env.*
+*.pem
+*.key
+*.cert
+secrets.json
+credentials.json
+account.json
+auth.json
+
+# Local audio: never commit recordings (regenerate the sample with `npm run sample`)
+test-audio/
+*.wav
+*.mp3
+*.m4a
+*.aiff
