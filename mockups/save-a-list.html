@@ -1,0 +1,137 @@
+<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>Autosave A: Recent list under the drop zone</title>
+<style>/* Layout C (timeline on top, transcript below), chosen 4 Oct 2026 from mockups/c-timeline.html. */
+:root {
+  --bg: #fbfaf8;
+  --panel: #ffffff;
+  --fg: #1c1b1a;
+  --muted: #76716b;
+  --line: #e6e2dc;
+  --accent: #2f6fde;
+  --sel: #cfe0ff;
+  --sel-fg: inherit;
+  --hit: #ffe9a8;
+  --hit-active: #ffb938;
+  --hit-active-fg: #1c1b1a;
+  --cur: #2f6fde;
+  --cut: rgba(214, 64, 64, 0.16);
+  --danger: #c43c3c;
+  --sp1: #2f6fde;
+  --sp2: #c2620f;
+  --sp3: #2e8b57;
+  --sp4: #8a4fd1;
+  font-family: Inter, system-ui, -apple-system, sans-serif;
+  color-scheme: light;
+}
+/* Dark tokens: the system setting unless the user picked Light, or always when they picked Dark. */
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #151514;
+    --panel: #1d1d1b;
+    --fg: #ecebe8;
+    --muted: #9a958e;
+    --line: #34332f;
+    --accent: #6b9bff;
+    --sel: #3d6ee0;
+    --sel-fg: #fff;
+    --hit: rgba(255, 196, 61, 0.26);
+    --hit-active: #ffc43d;
+    --hit-active-fg: #161512;
+    --cur: #8fb4ff;
+    --cut: rgba(230, 90, 90, 0.22);
+    --danger: #ff7b7b;
+    --sp1: #6b9bff;
+    --sp2: #f0974a;
+    --sp3: #5fcf8f;
+    --sp4: #b893f5;
+    color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #151514;
+  --panel: #1d1d1b;
+  --fg: #ecebe8;
+  --muted: #9a958e;
+  --line: #34332f;
+  --accent: #6b9bff;
+  --sel: #3d6ee0;
+  --sel-fg: #fff;
+  --hit: rgba(255, 196, 61, 0.26);
+  --hit-active: #ffc43d;
+  --hit-active-fg: #161512;
+  --cur: #8fb4ff;
+  --cut: rgba(230, 90, 90, 0.22);
+  --danger: #ff7b7b;
+  --sp1: #6b9bff;
+  --sp2: #f0974a;
+  --sp3: #5fcf8f;
+  --sp4: #b893f5;
+  color-scheme: dark;
+}
+* { box-sizing: border-box; }
+html, body, #root { height: 100%; }
+body { margin: 0; background: var(--bg); color: var(--fg); font-size: 14px; }
+button, select, input { font: inherit; color: inherit; }
+button { background: var(--panel); border: 1px solid var(--line); border-radius: 8px; padding: 6px 12px; cursor: pointer; white-space: nowrap; }
+button:hover:not(:disabled) { border-color: var(--muted); }
+button:disabled { opacity: 0.45; cursor: default; }
+button.primary { background: var(--accent); border-color: var(--accent); color: #fff; }
+button.ghost { border-color: transparent; background: transparent; }
+button.ghost:hover:not(:disabled) { background: var(--bg); }
+button.danger { color: var(--danger); }
+select { background: var(--panel); border: 1px solid var(--line); border-radius: 8px; padding: 5px 8px; }
+.muted { color: var(--muted); }
+.mono { font-variant-numeric: tabular-nums; }
+
+.app { display: grid; grid-template-rows: auto auto 1fr; height: 100%; }
+
+/* top bar */
+.top { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; padding: 10px 20px; border-bottom: 1px solid var(--line); background: var(--panel); min-width: 0; }
+.top .name { font-weight: 600; margin-right: auto; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.search { display: flex; align-items: center; gap: 6px; }
+.search input { background: var(--panel); border: 1px solid var(--line); border-radius: 8px; padding: 6px 10px; width: 220px; }
+.search input:focus { outline: 2px solid var(--accent); outline-offset: -1px; }
+.menu { position: relative; }
+.menu-list { position: absolute; right: 0; top: calc(100% + 4px); background: var(--panel); border: 1px solid var(--line); border-radius: 10px; box-shadow: 0 8px 24px rgba(0,0,0,.12); padding: 4px; z-index: 10; min-width: 200px; }
+.menu-list button { display: block; width: 100%; text-align: left; border: 0; }
+.menu-list button:hover { background: var(--bg); }
+.menu-list small { display: block; color: var(--muted); }
+
+
+.frame { max-width: 1100px; margin: 0 auto 36px; border: 1px solid var(--line); border-radius: 12px; overflow: hidden; background: var(--bg); position: relative; }
+.cap { max-width: 1100px; margin: 28px auto 10px; font-size: 13px; color: var(--muted); }
+.cap b { color: var(--fg); }
+body { padding: 0 16px 40px; height: auto; }
+h1.t { max-width: 1100px; margin: 24px auto 4px; font-size: 22px; }
+p.lead { max-width: 1100px; margin: 0 auto; color: var(--muted); line-height: 1.5; }
+.empty { display: grid; place-items: center; padding: 36px 16px; }
+.drop { width: min(560px, 100%); border: 2px dashed var(--line); border-radius: 16px; padding: 32px 24px; text-align: center; background: var(--panel); }
+.drop h2 { font-size: 20px; margin: 0 0 8px; }
+.drop p { margin: 0 auto 18px; color: var(--muted); line-height: 1.5; }
+.settings { display: flex; gap: 12px; justify-content: center; flex-wrap: wrap; margin-top: 18px; font-size: 13px; }
+.settings label { display: flex; align-items: center; gap: 6px; }
+.saved { font-size: 12px; color: var(--muted); display: inline-flex; align-items: center; gap: 5px; white-space: nowrap; }
+.saved i { width: 7px; height: 7px; border-radius: 50%; background: #2e8b57; display: inline-block; }
+.saving i { background: #e0a020; }
+.fake-doc { padding: 22px 20px 30px; max-width: 760px; margin: 0 auto; font-size: 17px; line-height: 1.75; color: var(--muted); }
+.fake-tl { height: 70px; background: var(--panel); border-bottom: 1px solid var(--line); }
+
+.recent { width: min(560px, 100%); margin-top: 22px; }
+.recent h3 { font-size: 13px; margin: 0 0 8px; color: var(--muted); font-weight: 600; text-transform: uppercase; letter-spacing: .04em; }
+.recent .row { display: grid; grid-template-columns: 1fr auto auto auto; align-items: center; gap: 10px; padding: 10px 12px; background: var(--panel); border: 1px solid var(--line); border-radius: 10px; margin-bottom: 6px; }
+.recent .nm { min-width: 0; } .recent .nm b, .recent .nm span { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.recent .nm span { font-size: 12px; margin-top: 2px; }
+.recent .when { font-size: 12px; }
+.recent .x { padding: 6px 8px; color: var(--muted); }
+.recent .note { font-size: 12px; color: var(--muted); margin: 8px 2px 0; line-height: 1.45; }
+@media (max-width: 560px) { .recent .when { display: none; } }
+</style></head><body>
+<h1 class="t">Autosave A: Recent list under the drop zone</h1><p class="lead">Simplest. Opening Yarnit always shows the start screen; your projects wait below the drop zone.</p>
+
+<p class="cap"><b>Start screen.</b> The drop zone stays as it is; saved projects are listed underneath, newest first.</p>
+<div class="frame"><header class="top"><span class="name">Yarnit</span><button class="ghost">?</button></header>
+<div class="empty"><div style="display:grid;justify-items:center;width:100%"><div class="drop"><h2>Drop an audio file to start</h2><p>MP3, WAV or M4A. It is transcribed and edited on this computer: nothing is uploaded.</p><button class="primary">Choose audio file</button><div class="settings"><label>Speech model <select><option>Balanced (base, English)</option></select></label><label>Engine <select><option>Standard (WASM)</option></select></label></div></div>
+<div class="recent"><h3>Recent projects</h3><div class="row"><div class="nm"><b>Interview with Sam.m4a</b><span class="muted">42:10 long, 35:48 after edits · 6,120 words · 7 highlights</span></div><span class="muted when">Saved 3 min ago</span><button>Open</button><button class="ghost x" title="Delete project">✕</button></div><div class="row"><div class="nm"><b>Episode 12 intro.wav</b><span class="muted">4:02 long, 3:31 after edits · 610 words · No highlights</span></div><span class="muted when">Saved yesterday</span><button>Open</button><button class="ghost x" title="Delete project">✕</button></div><div class="row"><div class="nm"><b>Voice memo 0412.mp3</b><span class="muted">2:17 long, 2:17 after edits · Transcribing stopped at 1:10</span></div><span class="muted when">Saved 2 Oct</span><button>Open</button><button class="ghost x" title="Delete project">✕</button></div><p class="note">Saved in this browser only. Clearing your browser data removes them.</p></div></div></div></div>
+<p class="cap"><b>Editing.</b> A "Projects" button goes back to the start screen. Next to the name: "Saved" (green dot), or "Saving" (amber) for a moment after each change.</p>
+<div class="frame"><header class="top"><button class="ghost">‹ Projects</button><span class="name">Interview with Sam.m4a <span class="saved" style="margin-left:8px"><i></i>Saved</span></span><div class="search"><input type="search" placeholder="Search transcript"></div><button class="ghost">Undo</button><button class="ghost" disabled>Redo</button><button class="ghost">Highlights (4)</button><button class="ghost">Pauses</button><button>Export</button><button class="ghost">?</button></header><div class="fake-tl"></div><div class="fake-doc">The transcript, as now.</div></div>
+
+</body></html>

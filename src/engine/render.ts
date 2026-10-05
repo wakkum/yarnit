@@ -120,3 +120,63 @@ export function snapToQuiet(mono: Float32Array, sampleRate: number, t: number, l
   }
   return (best + size / 2) / sampleRate;
 }
+
+export type SpeechPieceOptions = {
+  /** Longest piece in seconds (Whisper's window is 30 s). */
+  maxLen?: number;
+  /** Sound separated by a shorter gap counts as one stretch of speech. */
+  joinGap?: number;
+  /** A gap at least this long always ends a piece, so long silences are never transcribed. */
+  breakGap?: number;
+  /** Margin kept around speech so soft word onsets and tails are not clipped. */
+  pad?: number;
+};
+
+/**
+ * Split audio into pieces for transcription: only stretches with sound, each at most `maxLen`,
+ * cut in the middle of pauses. Sending Whisper pure silence makes it invent words, and a piece
+ * that starts right on a word tends to lose that word. Returns [start, end] in seconds.
+ */
+export function speechPieces(
+  mono: Float32Array,
+  sampleRate: number,
+  threshold: number,
+  { maxLen = 28, joinGap = 0.3, breakGap = 2, pad = 0.3 }: SpeechPieceOptions = {},
+): [number, number][] {
+  const size = Math.round(0.02 * sampleRate);
+  const dur = mono.length / sampleRate;
+  // stretches of sound, joined across short gaps
+  const regions: [number, number][] = [];
+  for (let i = 0; i + size <= mono.length; i += size) {
+    if (windowRms(mono, i, size) <= threshold) continue;
+    const a = i / sampleRate;
+    const b = (i + size) / sampleRate;
+    const last = regions.at(-1);
+    if (last && a - last[1] < joinGap) last[1] = b;
+    else regions.push([a, b]);
+  }
+  const out: [number, number][] = [];
+  let start = -1;
+  let end = -1;
+  const close = (nextStart: number) => {
+    // end halfway into the following gap (or at the padded end), never past the next sound
+    out.push([start, Math.min(dur, end + pad, end + (nextStart - end) / 2)]);
+  };
+  for (const [a, b] of regions) {
+    if (start < 0) {
+      start = Math.max(0, a - pad);
+    } else if (a - end >= breakGap || b - start > maxLen) {
+      close(a);
+      start = Math.max(out.at(-1)![1], a - pad);
+    }
+    end = b;
+    // one stretch of speech longer than a piece: cut it at its quietest point near the limit
+    while (end - start > maxLen) {
+      const cut = snapToQuiet(mono, sampleRate, start + maxLen, start + maxLen - 8, start + maxLen);
+      out.push([start, cut]);
+      start = cut;
+    }
+  }
+  if (start >= 0) close(Infinity);
+  return out;
+}

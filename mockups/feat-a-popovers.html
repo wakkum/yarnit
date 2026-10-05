@@ -1,0 +1,198 @@
+<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>Features A: Popovers</title>
+<style>/* Layout C (timeline on top, transcript below), chosen 4 Oct 2026 from mockups/c-timeline.html. */
+:root {
+  --bg: #fbfaf8;
+  --panel: #ffffff;
+  --fg: #1c1b1a;
+  --muted: #76716b;
+  --line: #e6e2dc;
+  --accent: #2f6fde;
+  --sel: #d6e4ff;
+  --hit: #ffe9a8;
+  --hit-active: #ffc94d;
+  --cut: rgba(214, 64, 64, 0.16);
+  --danger: #c43c3c;
+  --sp1: #2f6fde;
+  --sp2: #c2620f;
+  --sp3: #2e8b57;
+  --sp4: #8a4fd1;
+  font-family: Inter, system-ui, -apple-system, sans-serif;
+  color-scheme: light;
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #151514;
+    --panel: #1d1d1b;
+    --fg: #ecebe8;
+    --muted: #9a958e;
+    --line: #2e2d2a;
+    --accent: #6b9bff;
+    --sel: #23406f;
+    --hit: #5b4a12;
+    --hit-active: #8a6a10;
+    --cut: rgba(230, 90, 90, 0.22);
+    --danger: #ff7b7b;
+    --sp1: #6b9bff;
+    --sp2: #f0974a;
+    --sp3: #5fcf8f;
+    --sp4: #b893f5;
+    color-scheme: dark;
+  }
+}
+* { box-sizing: border-box; }
+html, body, #root { height: 100%; }
+body { margin: 0; background: var(--bg); color: var(--fg); font-size: 14px; }
+button, select, input { font: inherit; color: inherit; }
+button { background: var(--panel); border: 1px solid var(--line); border-radius: 8px; padding: 6px 12px; cursor: pointer; white-space: nowrap; }
+button:hover:not(:disabled) { border-color: var(--muted); }
+button:disabled { opacity: 0.45; cursor: default; }
+button.primary { background: var(--accent); border-color: var(--accent); color: #fff; }
+button.ghost { border-color: transparent; background: transparent; }
+button.ghost:hover:not(:disabled) { background: var(--bg); }
+button.danger { color: var(--danger); }
+select { background: var(--panel); border: 1px solid var(--line); border-radius: 8px; padding: 5px 8px; }
+.muted { color: var(--muted); }
+.mono { font-variant-numeric: tabular-nums; }
+
+.app { display: grid; grid-template-rows: auto auto 1fr; height: 100%; }
+
+/* top bar */
+.top { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; padding: 10px 20px; border-bottom: 1px solid var(--line); background: var(--panel); min-width: 0; }
+.top .name { font-weight: 600; margin-right: auto; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.search { display: flex; align-items: center; gap: 6px; }
+.search input { background: var(--panel); border: 1px solid var(--line); border-radius: 8px; padding: 6px 10px; width: 220px; }
+.search input:focus { outline: 2px solid var(--accent); outline-offset: -1px; }
+.menu { position: relative; }
+.menu-list { position: absolute; right: 0; top: calc(100% + 4px); background: var(--panel); border: 1px solid var(--line); border-radius: 10px; box-shadow: 0 8px 24px rgba(0,0,0,.12); padding: 4px; z-index: 10; min-width: 200px; }
+.menu-list button { display: block; width: 100%; text-align: left; border: 0; }
+.menu-list button:hover { background: var(--bg); }
+.menu-list small { display: block; color: var(--muted); }
+
+/* timeline */
+.timeline { background: var(--panel); border-bottom: 1px solid var(--line); padding: 10px 20px 14px; }
+.transport { display: flex; align-items: center; gap: 12px; margin-bottom: 10px; min-height: 36px; }
+.play { width: 36px; height: 36px; border-radius: 50%; padding: 0; background: var(--accent); color: #fff; border: 0; flex: none; }
+.progress { flex: 1; max-width: 360px; height: 6px; background: var(--line); border-radius: 3px; overflow: hidden; }
+.progress > div { height: 100%; background: var(--accent); transition: width .3s; }
+.status-error { color: var(--danger); }
+.ruler { position: relative; height: 16px; margin-left: 130px; font-size: 11px; color: var(--muted); margin-bottom: 4px; }
+.ruler span { position: absolute; transform: translateX(-50%); white-space: nowrap; }
+.ruler span:first-child { transform: none; }
+.lane { display: grid; grid-template-columns: 120px 1fr; gap: 10px; align-items: stretch; margin-bottom: 6px; }
+.lane-head { border: 1px solid var(--line); border-left-width: 3px; border-radius: 8px; padding: 6px 8px; font-size: 12px; overflow: hidden; }
+.lane-head b { display: block; }
+.lane-head span { display: block; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.lane-body { position: relative; border: 1px solid var(--line); border-radius: 8px; overflow: hidden; height: 56px; cursor: pointer; }
+.lane-body canvas { position: absolute; inset: 0; width: 100%; height: 100%; }
+.cut-region { position: absolute; top: 0; bottom: 0; background: var(--cut); pointer-events: none; }
+.playhead { position: absolute; top: 0; bottom: 0; width: 2px; margin-left: -1px; background: var(--accent); pointer-events: none; }
+
+/* transcript */
+.doc { overflow: auto; padding: 24px 20px 80px; }
+.doc-inner { max-width: 760px; margin: 0 auto; }
+.para { display: grid; grid-template-columns: 88px 1fr; gap: 16px; margin-bottom: 20px; }
+.para-label { display: flex; flex-direction: column; font-weight: 600; font-size: 13px; padding-top: 4px; }
+.para-label .ts { color: var(--muted); font-weight: 400; font-size: 12px; }
+.para p { margin: 0; font-size: 17px; line-height: 1.75; max-width: 70ch; user-select: none; }
+.w { border-radius: 3px; padding: 0 1px; cursor: pointer; }
+.w:hover { background: var(--bg); box-shadow: inset 0 0 0 1px var(--line); }
+.w.fill { font-style: italic; }
+.w.del { text-decoration: line-through; color: var(--muted); opacity: 0.7; cursor: default; }
+.w.hit { background: var(--hit); }
+.w.hit-active { background: var(--hit-active); }
+.w.sel { background: var(--sel); }
+.w.cur { box-shadow: inset 0 -2px 0 var(--accent); }
+.hint { margin-top: 32px; font-size: 13px; color: var(--muted); line-height: 1.6; max-width: 70ch; }
+kbd { font: 12px ui-monospace, monospace; border: 1px solid var(--line); border-bottom-width: 2px; border-radius: 4px; padding: 0 4px; }
+
+/* empty state */
+.empty { grid-row: 2 / -1; display: grid; place-items: center; padding: 24px 16px; }
+.drop { width: min(560px, 100%); border: 2px dashed var(--line); border-radius: 16px; padding: 40px 24px; text-align: center; background: var(--panel); }
+.drop.over { border-color: var(--accent); background: var(--sel); }
+.drop h1 { font-size: 20px; margin: 0 0 8px; }
+.drop p { margin: 0 auto 20px; max-width: 70ch; color: var(--muted); line-height: 1.5; }
+.settings { display: flex; gap: 12px; justify-content: center; flex-wrap: wrap; margin-top: 20px; font-size: 13px; }
+.settings label { display: flex; align-items: center; gap: 6px; }
+
+/* help drawer */
+.app.with-help { grid-template-columns: 1fr 380px; }
+.app > * { grid-column: 1; min-width: 0; }
+.app > .help { grid-column: 2; grid-row: 1 / -1; border-left: 1px solid var(--line); background: var(--panel); overflow: auto; padding: 16px 20px 40px; }
+.help-toggle.on { background: var(--sel); }
+.help-head { display: flex; align-items: center; margin-bottom: 16px; }
+.help-head h2 { font-size: 16px; margin: 0 auto 0 0; }
+.help section { margin-bottom: 28px; }
+.help h3 { font-size: 12px; text-transform: uppercase; letter-spacing: .06em; color: var(--muted); margin: 0 0 12px; }
+.steps { margin: 0; padding: 0; list-style: none; counter-reset: s; display: grid; gap: 12px; }
+.steps li { counter-increment: s; display: grid; grid-template-columns: 28px 1fr; column-gap: 10px; line-height: 1.5; }
+.steps li::before { content: counter(s); grid-row: span 2; width: 24px; height: 24px; border-radius: 50%; background: var(--sel); color: var(--accent); display: grid; place-items: center; font-weight: 600; font-size: 13px; }
+.steps li span { color: var(--muted); }
+.keys { width: 100%; border-collapse: collapse; }
+.keys td { padding: 7px 0; border-bottom: 1px solid var(--line); vertical-align: top; line-height: 1.5; }
+.keys td:first-child { color: var(--muted); padding-right: 16px; width: 40%; }
+.help details { border-bottom: 1px solid var(--line); padding: 10px 0; }
+.help summary { cursor: pointer; font-weight: 600; }
+.help details p { margin: 6px 0 0; color: var(--muted); line-height: 1.55; max-width: 70ch; }
+
+@media (max-width: 700px) {
+  .app.with-help { grid-template-columns: 1fr; }
+  .app > .help { position: fixed; inset: 0; z-index: 20; }
+  .top { flex-wrap: wrap; padding: 10px 16px; }
+  .search input { width: 140px; }
+  .timeline, .doc { padding-left: 16px; padding-right: 16px; }
+  .lane { grid-template-columns: 1fr; }
+  .lane-head { display: none; }
+  .ruler { margin-left: 0; }
+  .para { grid-template-columns: 1fr; gap: 2px; }
+  .para-label { flex-direction: row; gap: 8px; }
+}
+</style><style>
+:root { --sel: #cfe0ff; --sel-fg: inherit; --hit: #ffe9a8; --hit-active: #ffb938; --hit-active-fg: #1c1b1a; --cur: #2f6fde; }
+:root:has(#t-dark:checked) { --bg: #151514; --panel: #1d1d1b; --fg: #ecebe8; --muted: #9a958e; --line: #34332f; --accent: #6b9bff; --sel: #3d6ee0; --sel-fg: #fff; --hit: rgba(255, 196, 61, .26); --hit-active: #ffc43d; --hit-active-fg: #161512; --cur: #8fb4ff; --cut: rgba(230, 90, 90, .22); --danger: #ff7b7b; --sp1: #6b9bff; --sp2: #f0974a; color-scheme: dark; }
+@media (prefers-color-scheme: dark) { :root:has(#t-auto:checked) { --bg: #151514; --panel: #1d1d1b; --fg: #ecebe8; --muted: #9a958e; --line: #34332f; --accent: #6b9bff; --sel: #3d6ee0; --sel-fg: #fff; --hit: rgba(255, 196, 61, .26); --hit-active: #ffc43d; --hit-active-fg: #161512; --cur: #8fb4ff; --cut: rgba(230, 90, 90, .22); --danger: #ff7b7b; --sp1: #6b9bff; --sp2: #f0974a; color-scheme: dark; } }
+@media (prefers-color-scheme: light) { :root:has(#t-auto:checked) { --bg: #fbfaf8; --panel: #fff; --fg: #1c1b1a; --muted: #76716b; --line: #e6e2dc; --accent: #2f6fde; --sel: #cfe0ff; --sel-fg: inherit; --hit: #ffe9a8; --hit-active: #ffb938; --hit-active-fg: #1c1b1a; --cur: #2f6fde; --cut: rgba(214,64,64,.16); --danger: #c43c3c; --sp1: #2f6fde; --sp2: #c2620f; color-scheme: light; } }
+:root:has(#t-light:checked) { --bg: #fbfaf8; --panel: #fff; --fg: #1c1b1a; --muted: #76716b; --line: #e6e2dc; --accent: #2f6fde; --sel: #cfe0ff; --sel-fg: inherit; --hit: #ffe9a8; --hit-active: #ffb938; --hit-active-fg: #1c1b1a; --cur: #2f6fde; --cut: rgba(214,64,64,.16); --danger: #c43c3c; --sp1: #2f6fde; --sp2: #c2620f; color-scheme: light; }
+body { background: var(--bg); color: var(--fg); }
+.fakewave { background: repeating-linear-gradient(90deg, color-mix(in srgb, var(--sp1) 60%, transparent) 0 2px, transparent 2px 5px); background-size: 100% 60%; background-repeat: repeat-x; background-position: center; }
+.lane-body .cut-region { background: var(--cut); }
+.w.sel { background: var(--sel); color: var(--sel-fg); border-radius: 0; padding: 2px 0; }
+.selrun { background: var(--sel); color: var(--sel-fg); border-radius: 4px; padding: 3px 2px; box-decoration-break: clone; -webkit-box-decoration-break: clone; }
+.w.hit { background: var(--hit); }
+.w.hit-active { background: var(--hit-active); color: var(--hit-active-fg); box-shadow: 0 0 0 2px var(--hit-active); }
+.w.cur { box-shadow: inset 0 -3px 0 var(--cur); }
+.theme { display: inline-flex; border: 1px solid var(--line); border-radius: 8px; overflow: hidden; }
+.theme label { padding: 5px 10px; cursor: pointer; font-size: 13px; color: var(--muted); }
+:root:has(#t-auto:checked) label[for=t-auto], :root:has(#t-light:checked) label[for=t-light], :root:has(#t-dark:checked) label[for=t-dark] { background: var(--sel); color: var(--sel-fg); }
+.pop { position: absolute; background: var(--panel); border: 1px solid var(--line); border-radius: 12px; box-shadow: 0 12px 32px rgba(0,0,0,.25); padding: 14px 16px; z-index: 5; font-size: 13px; }
+.pop h4 { margin: 0 0 10px; font-size: 13px; }
+.pop .row { display: flex; align-items: center; gap: 8px; margin-bottom: 10px; }
+.pop input[type=text], .pop input.num { font: inherit; color: inherit; background: var(--bg); border: 1px solid var(--line); border-radius: 6px; padding: 5px 8px; }
+.pop input.num { width: 64px; }
+.pill { position: relative; display: inline-flex; gap: 2px; vertical-align: 2px; margin-left: 4px; background: var(--panel); border: 1px solid var(--line); border-radius: 8px; padding: 2px; box-shadow: 0 4px 14px rgba(0,0,0,.2); font-size: 12px; }
+.pill button { border: 0; padding: 3px 8px; font-size: 12px; background: transparent; }
+.pill button:hover { background: var(--bg); }
+.pill kbd { font-size: 10px; opacity: .7; }
+.note { font-size: 12px; color: var(--muted); }
+.lbl-btn { all: unset; cursor: pointer; display: flex; flex-direction: column; font-weight: 600; font-size: 13px; border-radius: 6px; padding: 2px 4px; margin: -2px -4px; }
+.lbl-btn:hover, .lbl-btn.open { background: var(--sel); color: var(--sel-fg); }
+.pause { display: inline-block; font-size: 11px; color: var(--muted); border: 1px dashed var(--muted); border-radius: 99px; padding: 0 7px; line-height: 18px; vertical-align: 2px; cursor: pointer; }
+.pause:hover { color: var(--danger); border-color: var(--danger); }
+.caption { max-width: 760px; margin: 0 auto 16px; padding: 10px 14px; border: 1px solid var(--line); border-radius: 10px; font-size: 13px; color: var(--muted); background: var(--panel); line-height: 1.5; }
+.caption b { color: var(--fg); }
+.top { flex-wrap: wrap; }</style></head><body><input type="radio" name="theme" id="t-auto" hidden><input type="radio" name="theme" id="t-light" hidden><input type="radio" name="theme" id="t-dark" hidden checked><div class="app"><header class="top"><span class="name">interview.wav</span>
+<div class="search"><input type="search" value="the"><span class="muted mono">2 of 8</span><button class="ghost">↑</button><button class="ghost">↓</button></div>
+<button class="ghost">Undo</button><button class="ghost" disabled>Redo</button><span style="position:relative"><button>Shorten pauses</button>
+<div class="pop" style="right:0;top:calc(100% + 6px);width:300px"><h4>Shorten pauses</h4>
+<div class="row">Pauses longer than <input class="num" value="1.0 s"></div>
+<div class="row">become <input class="num" value="0.4 s"></div>
+<p class="note" style="margin:0 0 12px">Found 7 pauses. Saves 9.6 s. Marked in red on the timeline until you apply.</p>
+<div class="row" style="justify-content:flex-end;margin:0"><button class="ghost">Cancel</button><button class="primary">Shorten 7 pauses</button></div></div></span><button>Remove fillers (2)</button>
+<button class="primary">Export</button><span class="theme"><label for="t-auto">Auto</label><label for="t-light">Light</label><label for="t-dark">Dark</label></span><button class="ghost">Help</button></header><section class="timeline"><div class="transport"><button class="play">▶</button><span class="mono">0:09 / 0:50</span></div>
+<div class="lane"><div class="lane-head" style="border-left-color:var(--sp1)"><b>Track 1</b><span>interview.wav</span></div><div class="lane-body fakewave" style="position:relative"><div class="cut-region" style="left:22%;width:4%"></div><div class="cut-region" style="left:47%;width:3%"></div><div class="cut-region" style="left:71%;width:5%"></div><div class="playhead" style="left:18%"></div></div></div></section><main class="doc"><div class="doc-inner"><div class="caption"><b>A: Popovers.</b> Light / Dark / Auto switch in the top bar (try it). Selecting words shows a small Cut / Delete bar next to them. <b>Shorten pauses</b> opens a popover. Click a speaker name to rename it or move a paragraph to another speaker.</div>
+<div class="para"><div class="para-label" style="position:relative"><button class="lbl-btn " style="color:var(--sp1)">Host<span class="ts">0:00</span></button></div><p><span class="w">Welcome</span> <span class="w">back</span> <span class="w">to</span> <span class="w">Field</span> <span class="w">Notes.</span> <span class="w">Today</span> <span class="w">I</span> <span class="w">have</span> <span class="w">Omar</span> <span class="w">with</span> <span class="w">me,</span> <span class="w">who</span> <span class="w">spent,</span> <span class="w fill">um,</span> <span class="w">three</span> <span class="w">months</span> <span class="w">reporting</span> <span class="w">from</span> <span class="w hit">the</span> <span class="w">coast.</span></p></div><div class="para"><div class="para-label" style="position:relative"><button class="lbl-btn " style="color:var(--sp2)">Omar<span class="ts">0:09</span></button></div><p><span class="selrun"><span class="w sel">Thanks</span> <span class="w sel">for</span> <span class="w sel">having</span> <span class="w sel">me.</span> <span class="w sel">It</span> <span class="w sel">was,</span></span><span class="pill"><button>Cut <kbd>⌘X</kbd></button><button class="danger">Delete</button></span> <span class="w fill">uh,</span> <span class="w">it</span> <span class="w">was</span> <span class="w">a</span> <span class="w">long</span> <span class="w">trip,</span> <span class="w">but</span> <span class="w">honestly</span> <span class="w hit-active">the</span> <span class="w">most</span> <span class="w">interesting</span> <span class="w">story</span> <span class="w">I</span> <span class="w">have</span> <span class="w">worked</span> <span class="w">on.</span></p></div><div class="para"><div class="para-label" style="position:relative"><button class="lbl-btn open" style="color:">Host<span class="ts">0:18</span></button>
+<div class="pop" style="left:0;top:calc(100% + 6px);width:250px"><h4>Speaker</h4>
+<div class="row"><input type="text" value="Host" style="flex:1"><button class="primary">Rename</button></div>
+<div class="note" style="margin:0 0 6px;font-weight:400">Renames every paragraph by Host.</div>
+<h4 style="margin-top:14px">This paragraph is by</h4>
+<div style="display:grid;gap:4px"><button style="text-align:left">● Host <span class="muted">(current)</span></button><button style="text-align:left">● Omar</button><button class="ghost" style="text-align:left">+ New speaker</button></div></div></div><p><span class="w">Let's</span> <span class="w">start</span> <span class="w">with</span> <span class="w hit">the</span> <span class="w">fishing</span> <span class="w">communities.</span> <span class="w">What</span> <span class="w">did</span> <span class="w">you</span> <span class="w">see</span> <span class="w">when</span> <span class="w">you</span> <span class="w">first</span> <span class="w">arrived?</span></p></div><div class="para"><div class="para-label" style="position:relative"><button class="lbl-btn " style="color:var(--sp2)">Omar<span class="ts">0:24</span></button></div><p><span class="w hit">The</span> <span class="w">first</span> <span class="w">thing</span> <span class="w">you</span> <span class="w">notice</span> <span class="w">is</span> <span class="w">how</span> <span class="w">quiet</span> <span class="w hit">the</span> <span class="w">harbor</span> <span class="w">is,</span> <span class="w">half</span> <span class="w hit">the</span> <span class="w">boats</span> <span class="w">never</span> <span class="w">leave</span> <span class="w">anymore.</span> <span class="w">And</span> <span class="w hit">the</span> <span class="w">people</span> <span class="w">who</span> <span class="w">stay</span> <span class="w">are</span> <span class="w">mostly</span> <span class="w">over</span> <span class="w">60.</span></p></div>
+<p class="hint">After <b>Cut</b>, click the word the passage should go before and a <b>Paste here</b> button appears in the same spot.</p></div></main></div></body></html>

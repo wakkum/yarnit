@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { renderEdit, silenceThreshold, snapToQuiet, speechEnd } from './render';
+import { renderEdit, silenceThreshold, snapToQuiet, speechEnd, speechPieces } from './render';
 
 const SR = 1000; // 1 kHz keeps sample math readable
 const ramp = (n: number) => Float32Array.from({ length: n }, (_, i) => i);
@@ -82,5 +82,36 @@ describe('snapToQuiet', () => {
   it('keeps the original point over flat silence', () => {
     const s = new Float32Array(1000);
     expect(snapToQuiet(s, SR, 0.5, 0.4, 0.6)).toBeCloseTo(0.5, 2);
+  });
+});
+
+describe('speechPieces', () => {
+  // seconds of sound/silence -> 1 kHz signal
+  const signal = (parts: [number, boolean][]) => {
+    const out: number[] = [];
+    for (const [sec, loud] of parts) for (let i = 0; i < sec * SR; i++) out.push(loud ? 0.5 : 0);
+    return Float32Array.from(out);
+  };
+  const round = (p: [number, number][]) => p.map(([a, b]) => [+a.toFixed(2), +b.toFixed(2)]);
+
+  it('skips long silences and keeps a pad around speech', () => {
+    const s = signal([[30, false], [5, true], [10, false], [4, true], [3, false]]);
+    expect(round(speechPieces(s, SR, 0.01))).toEqual([[29.7, 35.3], [44.7, 49.3]]);
+  });
+
+  it('joins sound across short gaps and splits long runs at a pause, padding both sides', () => {
+    const s = signal([[10, true], [0.2, false], [10, true], [1, false], [10, true]]);
+    const p = speechPieces(s, SR, 0.01, { maxLen: 25 });
+    expect(round(p)).toEqual([[0, 20.5], [20.9, 31.2]]);
+  });
+
+  it('splits continuous speech longer than a piece at the quietest point', () => {
+    const s = signal([[40, true]]);
+    s.fill(0.1, 26_000, 26_050);
+    const p = speechPieces(s, SR, 0.01, { maxLen: 28 });
+    expect(p).toHaveLength(2);
+    expect(p[0][1]).toBeGreaterThan(26);
+    expect(p[0][1]).toBeLessThan(26.05);
+    expect(p[1][0]).toBe(p[0][1]);
   });
 });

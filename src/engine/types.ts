@@ -29,6 +29,15 @@ export type Word = {
  */
 export type Segment = { id: string; start: number; end: number };
 
+export const HIGHLIGHT_COLORS = ['red', 'orange', 'green', 'blue', 'purple', 'pink'] as const;
+export type HighlightColor = (typeof HIGHLIGHT_COLORS)[number];
+
+/**
+ * A coloured span of the source timeline (so it covers every track at that moment, and can later
+ * become segments of a main timeline). Spans never overlap: a new colour replaces what was there.
+ */
+export type Highlight = { id: string; color: HighlightColor; start: number; end: number };
+
 export type Project = {
   id: string;
   name: string;
@@ -39,6 +48,9 @@ export type Project = {
   speakers: Speaker[];
   /** Written once by transcription; edits never touch words. */
   words: Word[];
-  /** The only thing edits change. */
+  /** The only thing audio edits change. */
   segments: Segment[];
+  highlights: Highlight[];
+  /** Optional meaning per colour, e.g. red = "Must keep". */
+  highlightNames: Partial<Record<HighlightColor, string>>;
 };

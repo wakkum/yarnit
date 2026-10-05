@@ -1,7 +1,10 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { displayWords } from '../engine/edl';
+import { displayWords, findPauses } from '../engine/edl';
+import { passages, wordColors } from '../engine/highlights';
 import { searchHits } from '../engine/view';
-import { useStore } from '../state/store';
+import { useStore, type Settings } from '../state/store';
+import { combo, isMac } from './keys';
+import { clock } from './time';
 
 export function TopBar() {
   const project = useStore((s) => s.project);
@@ -10,14 +13,24 @@ export function TopBar() {
   const canUndo = useStore((s) => s.past.length > 0);
   const canRedo = useStore((s) => s.future.length > 0);
   const phase = useStore((s) => s.phase);
-  const helpOpen = useStore((s) => s.helpOpen);
-  const { setQuery, stepHit, deleteHits, undo, redo, removeFillers, exportAudio, setHelp } = useStore.getState();
+  const panel = useStore((s) => s.panel);
+  const helpOpen = panel === 'help';
+  const settings = useStore((s) => s.settings);
+  const { setQuery, stepHit, deleteHits, undo, redo, removeFillers, exportAudio, setPanel, setSettings } = useStore.getState();
   const [menu, setMenu] = useState(false);
   const menuRef = useRef<HTMLDivElement>(null);
 
   const display = useMemo(() => (project ? displayWords(project.words, project.segments) : []), [project]);
   const hits = useMemo(() => searchHits(display, query), [display, query]);
   const fillers = useMemo(() => display.filter((d) => !d.deleted && d.word.isFiller).length, [display]);
+  const highlightCount = useMemo(
+    () => (project ? passages(display, project.segments, wordColors(project.words, project.highlights)).length : 0),
+    [display, project],
+  );
+  const pauses = useMemo(
+    () => (project && phase === 'ready' ? findPauses(display, project.segments, settings.pauseMin) : []),
+    [display, project, phase, settings.pauseMin],
+  );
 
   useEffect(() => {
     if (!menu) return;
@@ -30,7 +43,10 @@ export function TopBar() {
 
   return (
     <header className="top">
-      <span className="name">{project ? project.name : 'Yarnit'}</span>
+      <span className="name">
+        {project ? project.name : 'Yarnit'}
+        {project && <SaveState />}
+      </span>
       {project && (
         <>
           <div className="search">
@@ -64,15 +80,25 @@ export function TopBar() {
               </>
             )}
           </div>
-          <button className="ghost" onClick={undo} disabled={!canUndo} title="Undo (Cmd+Z)">
+          <button className="ghost" onClick={undo} disabled={!canUndo} title={`Undo (${combo('mod', 'Z')})`}>
             Undo
           </button>
-          <button className="ghost" onClick={redo} disabled={!canRedo} title="Redo (Shift+Cmd+Z)">
+          <button className="ghost" onClick={redo} disabled={!canRedo} title={`Redo (${isMac ? combo('shift', 'mod', 'Z') : combo('mod', 'Y')})`}>
             Redo
           </button>
+          <button
+            className={`highlights-toggle${panel === 'highlights' ? ' on' : ''}`}
+            onClick={() => setPanel(panel === 'highlights' ? null : 'highlights')}
+            aria-expanded={panel === 'highlights'}
+            title="Highlighted passages by colour"
+          >
+            Highlights{highlightCount ? ` (${highlightCount})` : ''}
+          </button>
+          <PausesMenu count={pauses.length} saves={pauses.reduce((t, p) => t + Math.max(0, p.length - settings.pauseKeep), 0)} />
           <button onClick={removeFillers} disabled={!fillers}>
             Remove fillers{fillers ? ` (${fillers})` : ''}
           </button>
+          <ProjectsToggle />
           <div className="menu" ref={menuRef}>
             <button className="primary" onClick={() => setMenu(!menu)} disabled={busy}>
               Export
@@ -102,14 +128,147 @@ export function TopBar() {
           </div>
         </>
       )}
+      {!project && <ProjectsToggle />}
+      <div className="theme" role="group" aria-label="Theme">
+        {(['auto', 'light', 'dark'] as Settings['theme'][]).map((t) => (
+          <button
+            key={t}
+            className={settings.theme === t ? 'on' : ''}
+            aria-pressed={settings.theme === t}
+            onClick={() => setSettings({ theme: t })}
+            title={t === 'auto' ? 'Follow the system setting' : undefined}
+          >
+            {t[0].toUpperCase() + t.slice(1)}
+          </button>
+        ))}
+      </div>
       <button
         className={`ghost help-toggle${helpOpen ? ' on' : ''}`}
-        onClick={() => setHelp(!helpOpen)}
+        onClick={() => setPanel(helpOpen ? null : 'help')}
         aria-expanded={helpOpen}
         title="Help and shortcuts (?)"
       >
         Help
       </button>
     </header>
+  );
+}
+
+function ProjectsToggle() {
+  const on = useStore((s) => s.panel === 'projects');
+  return (
+    <button
+      className={`ghost panel-toggle${on ? ' on' : ''}`}
+      onClick={() => useStore.getState().setPanel(on ? null : 'projects')}
+      aria-expanded={on}
+      title="Switch project, start a new one, or delete one"
+    >
+      Projects
+    </button>
+  );
+}
+
+/** Green "Saved 10:42", amber "Saving", or why nothing is being saved. */
+function SaveState() {
+  const status = useStore((s) => s.saveStatus);
+  const savedAt = useStore((s) => s.savedAt);
+  const [label, title] =
+    status === 'saved'
+      ? [`Saved ${clock(savedAt)}`, 'Saved in this browser. It reopens when you come back.']
+      : status === 'saving'
+        ? ['Saving', 'Saving in this browser']
+        : status === 'error'
+          ? ['Not saved', 'Saving failed, probably because the disk or browser storage is full. Yarnit tries again after your next change.']
+          : ['Not saved', 'This browser is not letting Yarnit save (for example a private window). Edits are lost when you close the tab.'];
+  return (
+    <span className={`save-state ${status}`} title={title} role="status">
+      <i />
+      {label}
+    </span>
+  );
+}
+
+/** Seconds field: typed freely, applied on blur or Enter, clamped to a sane range. */
+function SecondsInput({ value, min, max, onChange, label }: { value: number; min: number; max: number; onChange: (v: number) => void; label: string }) {
+  // parent passes key={value}, so an outside change resets the text
+  const [text, setText] = useState(String(value));
+  const apply = () => {
+    const v = parseFloat(text.replace(',', '.'));
+    if (Number.isFinite(v)) onChange(Math.min(max, Math.max(min, Math.round(v * 10) / 10)));
+    else setText(String(value));
+  };
+  return (
+    <input
+      type="text"
+      inputMode="decimal"
+      aria-label={label}
+      value={text}
+      style={{ width: 56 }}
+      onChange={(e) => setText(e.target.value)}
+      onBlur={apply}
+      onKeyDown={(e) => e.key === 'Enter' && apply()}
+    />
+  );
+}
+
+function PausesMenu({ count, saves }: { count: number; saves: number }) {
+  const settings = useStore((s) => s.settings);
+  const { setSettings, shortenPauses } = useStore.getState();
+  const [open, setOpen] = useState(false);
+  const ref = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!open) return;
+    const close = (e: MouseEvent) => !ref.current?.contains(e.target as Node) && setOpen(false);
+    window.addEventListener('mousedown', close);
+    return () => window.removeEventListener('mousedown', close);
+  }, [open]);
+
+  return (
+    <div className="menu" ref={ref}>
+      <button onClick={() => setOpen(!open)} aria-expanded={open}>
+        Shorten pauses{count ? ` (${count})` : ''}
+      </button>
+      {open && (
+        <div className="pop" style={{ right: 0, top: 'calc(100% + 6px)', width: 290 }}>
+          <h4>Shorten pauses</h4>
+          <div className="row">
+            Pauses longer than
+            <SecondsInput key={settings.pauseMin} label="Minimum pause" value={settings.pauseMin} min={0.3} max={10} onChange={(pauseMin) => setSettings({ pauseMin })} />s
+          </div>
+          <div className="row">
+            become
+            <SecondsInput
+              key={settings.pauseKeep}
+              label="Shortened length"
+              value={settings.pauseKeep}
+              min={0}
+              max={Math.max(0, settings.pauseMin - 0.1)}
+              onChange={(pauseKeep) => setSettings({ pauseKeep })}
+            />s
+          </div>
+          <p className="note">
+            {count
+              ? `Found ${count} pause${count === 1 ? '' : 's'}, marked as chips in the transcript. Saves ${saves.toFixed(1)} s. Click a chip to shorten just that one.`
+              : 'No pauses that long. Try a lower number.'}
+          </p>
+          <div className="row" style={{ justifyContent: 'flex-end', margin: 0 }}>
+            <button className="ghost" onClick={() => setOpen(false)}>
+              Close
+            </button>
+            <button
+              className="primary"
+              disabled={!count}
+              onClick={() => {
+                shortenPauses();
+                setOpen(false);
+              }}
+            >
+              Shorten {count || ''} pause{count === 1 ? '' : 's'}
+            </button>
+          </div>
+        </div>
+      )}
+    </div>
   );
 }

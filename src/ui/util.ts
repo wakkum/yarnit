@@ -12,6 +12,12 @@ export const fmt = (s: number) => {
 
 export const trackColor = (i: number) => `var(--sp${(i % 4) + 1})`;
 
+/** Colour for a speaker: by position in the speaker list, else by track. */
+export function speakerColor(project: Project, trackId: string, speakerId?: string) {
+  const i = project.speakers.findIndex((s) => s.id === speakerId);
+  return trackColor(i >= 0 ? i : project.tracks.findIndex((t) => t.id === trackId));
+}
+
 /** Display name for a track: speaker name if set, else "Speaker N". */
 export function trackLabel(project: Project, trackId: string, speakerId?: string) {
   const sp = speakerId && project.speakers.find((s) => s.id === speakerId);

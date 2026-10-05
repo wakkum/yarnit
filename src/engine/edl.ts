@@ -75,8 +75,19 @@ const TAIL = 3600;
 /** Whisper word edges are only roughly right, so let a snap reach a little past them. */
 const SNAP_SLACK = 0.04;
 
-/** Group selected word ids into runs that are contiguous in source order, as source spans. */
-export function wordSpans(words: Word[], ids: Iterable<string>, snap?: Snap): [number, number][] {
+/**
+ * How much silence a moved passage takes along on each side. A delete takes half of each
+ * surrounding gap, but a move would carry half of a long pause to its new place as dead air.
+ */
+export const MOVE_PAD = 0.25;
+/** Paragraph moves keep more: the pause between paragraphs should travel with them. */
+export const PARAGRAPH_PAD = 0.75;
+
+/**
+ * Group selected word ids into runs that are contiguous in source order, as source spans.
+ * `pad` caps how far a span reaches past its first and last word (default: half the gap).
+ */
+export function wordSpans(words: Word[], ids: Iterable<string>, snap?: Snap, pad = Infinity): [number, number][] {
   const sorted = sourceOrder(words);
   const selected = new Set(ids);
   const spans: [number, number][] = [];
@@ -85,7 +96,12 @@ export function wordSpans(words: Word[], ids: Iterable<string>, snap?: Snap): [n
     const on = i < sorted.length && selected.has(sorted[i].id);
     if (on && runStart < 0) runStart = i;
     if (!on && runStart >= 0) {
-      spans.push([boundaryBefore(sorted, runStart, snap), boundaryAfter(sorted, i - 1, snap)]);
+      const first = sorted[runStart];
+      const last = sorted[i - 1];
+      spans.push([
+        Math.max(boundaryBefore(sorted, runStart, snap), first.start - pad),
+        Math.min(boundaryAfter(sorted, i - 1, snap), last.end + pad),
+      ]);
       runStart = -1;
     }
   }
@@ -119,16 +135,35 @@ export function moveWords(
   ids: Iterable<string>,
   targetId: string,
   side: 'before' | 'after',
+  pad = MOVE_PAD,
 ): Segment[] {
   const sel = new Set(ids);
   if (sel.has(targetId) || sel.size === 0) return segments;
   const sorted = sourceOrder(words);
   const ti = sorted.findIndex((w) => w.id === targetId);
   if (ti < 0) return segments;
-  const insertAt = side === 'before' ? boundaryBefore(sorted, ti) : boundaryAfter(sorted, ti);
+  // After earlier cuts and moves, the audio beside a word may be gone or play elsewhere, so every
+  // edge is kept inside the segment that holds its word (else a move could do nothing, or drag
+  // a stray piece of another passage along).
+  const host = (w: Word) => segments[segmentOf(segments, w)];
+  const target = sorted[ti];
+  const th = host(target);
+  if (!th) return segments; // the target word is itself cut
+  // land right next to the target word, not halfway into a long pause beside it
+  const insertAt =
+    side === 'before'
+      ? Math.max(boundaryBefore(sorted, ti), target.start - pad, th.start)
+      : Math.min(boundaryAfter(sorted, ti), target.end + pad, th.end);
 
   // 1. Split at every span edge and at the insertion point, so spans map to whole segments.
-  const spans = wordSpans(words, sel);
+  // the rest of a long pause stays where it was (and still shows as a pause chip there)
+  const spans = wordSpans(words, sel, undefined, pad).map(([a, b]): [number, number] => {
+    const first = sorted.find((w) => sel.has(w.id) && w.start >= a);
+    const last = [...sorted].reverse().find((w) => sel.has(w.id) && w.end <= b);
+    const fh = first && host(first);
+    const lh = last && host(last);
+    return [fh ? Math.max(a, fh.start) : a, lh ? Math.min(b, lh.end) : b];
+  });
   let segs = splitAt(segments, insertAt);
   for (const [a, b] of spans) segs = splitAt(splitAt(segs, a), b);
 
@@ -137,17 +172,12 @@ export function moveWords(
   const moved = segs.filter(inSpan);
   const rest = segs.filter((s) => !inSpan(s));
 
-  // 3. Insert where the segment ending at insertAt is (or before the one starting there).
-  let idx = rest.findIndex((s) => Math.abs(s.end - insertAt) < MIN_SPAN);
-  if (idx >= 0) idx += 1;
-  else idx = rest.findIndex((s) => Math.abs(s.start - insertAt) < MIN_SPAN);
-  // after the last word the boundary lies past the end: insert after the target's segment
-  if (idx < 0) {
-    const t = sorted[ti].start;
-    const host = rest.findIndex((r) => t >= r.start && t < r.end);
-    idx = host < 0 ? -1 : host + 1;
-  }
-  if (idx < 0) return segments; // insertion point was itself deleted
+  // 3. Insert next to the piece that now holds the target word. (Matching "the segment that ends at
+  // insertAt" instead picks the wrong one when a leftover piece elsewhere happens to end there too.)
+  const tm = (target.start + target.end) / 2;
+  let idx = rest.findIndex((r) => tm >= r.start && tm < r.end);
+  if (idx < 0) return segments;
+  if (side === 'after') idx += 1;
   return normalize([...rest.slice(0, idx), ...moved, ...rest.slice(idx)]);
 }
 
@@ -217,3 +247,76 @@ export const FILLERS = ['um', 'uh', 'erm', 'er', 'hmm', 'mm', 'ah', 'uhm', 'umm'
 
 export const isFillerText = (text: string, fillers = FILLERS) =>
   fillers.includes(text.toLowerCase().replace(/[^a-z']/g, ''));
+
+/**
+ * A stretch of dead air in the edited audio: between two kept words that play back to back
+ * (same segment, so nothing was cut there), or before the first / after the last kept word.
+ */
+/**
+ * Silence that plays between two kept words (or before the first / after the last).
+ * `pieces` are its source spans in playback order: one normally, more when the pause runs
+ * across a seam (after a cut or move, the end of one segment plus the start of the next).
+ */
+export type Pause = { pieces: [number, number][]; length: number; afterId?: string; beforeId?: string };
+
+const pause = (pieces: [number, number][], ids: Pick<Pause, 'afterId' | 'beforeId'>): Pause => {
+  const kept = pieces.filter(([a, b]) => b - a > MIN_SPAN);
+  return { pieces: kept, length: kept.reduce((t, [a, b]) => t + b - a, 0), ...ids };
+};
+
+/** Pauses longer than `min` seconds as they are heard, in playback order. */
+export function findPauses(display: DisplayWord[], segments: Segment[], min: number): Pause[] {
+  const kept = display.filter((d) => !d.deleted).map((d) => d.word);
+  const out: Pause[] = [];
+  if (!kept.length) return out;
+  const first = kept[0];
+  const fi = segmentOf(segments, first);
+  // lead-in: every segment before the first word's, plus the start of its own
+  if (fi >= 0) {
+    const pieces: [number, number][] = segments.slice(0, fi).map((s) => [s.start, s.end]);
+    pieces.push([segments[fi].start, first.start]);
+    out.push(pause(pieces, { beforeId: first.id }));
+  }
+  for (let i = 1; i < kept.length; i++) {
+    const a = kept[i - 1];
+    const b = kept[i];
+    const ia = segmentOf(segments, a);
+    const ib = segmentOf(segments, b);
+    if (ia < 0 || ib < ia) continue;
+    const pieces: [number, number][] =
+      ia === ib
+        ? [[a.end, b.start]]
+        : [
+            [a.end, segments[ia].end],
+            ...segments.slice(ia + 1, ib).map((s): [number, number] => [s.start, s.end]),
+            [segments[ib].start, b.start],
+          ];
+    out.push(pause(pieces, { afterId: a.id, beforeId: b.id }));
+  }
+  const last = kept.at(-1)!;
+  const li = segmentOf(segments, last);
+  if (li >= 0) {
+    const pieces: [number, number][] = [[last.end, segments[li].end], ...segments.slice(li + 1).map((s): [number, number] => [s.start, s.end])];
+    out.push(pause(pieces, { afterId: last.id }));
+  }
+  return out.filter((p) => p.length > min);
+}
+
+/**
+ * Cut each pause down to `keep` seconds by removing its middle, so the words on either side
+ * keep their natural lead-in and tail (`keep / 2` each). Leading/trailing pauses keep `keep / 2`
+ * next to the word. Across a seam, each side keeps its half and the rest goes.
+ */
+export function shortenPauses(segments: Segment[], pauses: Pause[], keep: number): Segment[] {
+  let out = segments;
+  for (const p of pauses) {
+    const n = p.pieces.length;
+    p.pieces.forEach(([start, end], i) => {
+      const from = i === 0 && p.afterId ? start + keep / 2 : start;
+      const to = i === n - 1 && p.beforeId ? end - keep / 2 : end;
+      // a one-piece pause shorter on one side than keep / 2 can't happen (length > min > keep)
+      if (to - from > MIN_SPAN) out = removeSpan(out, from, to);
+    });
+  }
+  return out;
+}

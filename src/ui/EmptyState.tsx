@@ -17,6 +17,14 @@ export function EmptyState() {
   const [over, setOver] = useState(false);
   const model = MODELS.find((m) => m.id === settings.model);
 
+  // decoding a new file or reopening a saved project: no drop zone to click meanwhile
+  if (phase === 'decoding')
+    return (
+      <div className="empty">
+        <p className="muted">{message}…</p>
+      </div>
+    );
+
   return (
     <div className="empty">
       <div

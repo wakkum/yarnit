@@ -1,7 +1,9 @@
 // Local Whisper transcription with word timestamps (Transformers.js), off the main thread.
-// Audio is split into ~2 minute pieces at quiet points so words stream back with progress
-// and editing can start before the whole file is done.
+// Only the stretches with sound are sent, in pieces of up to ~28 s (one Whisper window) cut in
+// pauses (render.ts speechPieces), so words and progress stream back every few seconds, long
+// silences are skipped (Whisper invents words on silence), and no piece starts on a word.
 import { pipeline, type AutomaticSpeechRecognitionPipeline } from '@huggingface/transformers';
+import { silenceThreshold, speechPieces } from '../engine/render';
 
 export type TranscribeRequest = {
   /** 16 kHz mono samples. */
@@ -24,8 +26,6 @@ export type TranscribeMessage =
   | { type: 'error'; message: string };
 
 const SR = 16_000;
-const PIECE = 120; // seconds
-const SPLIT_SEARCH = 10; // look this far back from a piece end for a quiet split point
 
 const post = (m: TranscribeMessage) => self.postMessage(m);
 
@@ -49,42 +49,15 @@ function load(model: string, device: 'webgpu' | 'wasm') {
   return asr;
 }
 
-/** Quietest 20 ms window between from and to (sample indices). */
-function quietestPoint(audio: Float32Array, from: number, to: number) {
-  const win = SR / 50;
-  let best = to;
-  let bestE = Infinity;
-  for (let i = Math.max(0, from); i + win < Math.min(to, audio.length); i += win / 2) {
-    let e = 0;
-    for (let j = i; j < i + win; j++) e += audio[j] * audio[j];
-    if (e < bestE) {
-      bestE = e;
-      best = i + win / 2;
-    }
-  }
-  return best;
-}
-
-function pieces(audio: Float32Array): [number, number][] {
-  const out: [number, number][] = [];
-  let at = 0;
-  while (at < audio.length) {
-    let end = Math.min(audio.length, at + PIECE * SR);
-    if (end < audio.length) end = quietestPoint(audio, end - SPLIT_SEARCH * SR, end);
-    out.push([at, end]);
-    at = end;
-  }
-  return out;
-}
-
 self.onmessage = async (e: MessageEvent<TranscribeRequest>) => {
   const { audio, model, language, device } = e.data;
   try {
     const transcriber = await load(model, device);
     post({ type: 'ready', device });
-    const list = pieces(audio);
-    for (const [a, b] of list) {
-      const offset = a / SR;
+    const duration = audio.length / SR;
+    for (const [from, to] of speechPieces(audio, SR, silenceThreshold(audio, SR))) {
+      const [a, b] = [Math.round(from * SR), Math.round(to * SR)];
+      const offset = from;
       const out = await transcriber(audio.subarray(a, b), {
         return_timestamps: 'word',
         chunk_length_s: 30,
@@ -93,14 +66,15 @@ self.onmessage = async (e: MessageEvent<TranscribeRequest>) => {
       });
       const chunks: Chunk[] = (Array.isArray(out) ? out[0] : out).chunks ?? [];
       const words: RawWord[] = chunks
-        .filter((c) => c.text.trim())
+        // Whisper emits stray punctuation-only "words" on silence (seen: a lone "." in 30 s of room noise)
+        .filter((c) => /[\p{L}\p{N}]/u.test(c.text))
         .map((c) => {
           const start = offset + c.timestamp[0];
           // the last word of a piece can come back without an end time
-          const end = c.timestamp[1] == null ? Math.min(start + 0.4, b / SR) : offset + c.timestamp[1];
+          const end = c.timestamp[1] == null ? Math.min(start + 0.4, to) : offset + c.timestamp[1];
           return { text: c.text.trim(), start, end: Math.max(end, start + 0.02) };
         });
-      post({ type: 'words', words, progress: b / audio.length });
+      post({ type: 'words', words, progress: to / duration });
     }
     post({ type: 'done' });
   } catch (err) {

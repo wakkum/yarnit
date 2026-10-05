@@ -1,4 +1,5 @@
-/* Layout C (timeline on top, transcript below), chosen 4 Oct 2026 from mockups/c-timeline.html. */
+<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>Paragraph moves B: Paragraphs as blocks</title>
+<style>/* Layout C (timeline on top, transcript below), chosen 4 Oct 2026 from mockups/c-timeline.html. */
 :root {
   --bg: #fbfaf8;
   --panel: #ffffff;
@@ -18,14 +19,6 @@
   --sp2: #c2620f;
   --sp3: #2e8b57;
   --sp4: #8a4fd1;
-  --hl-red: #e5484d;
-  --hl-orange: #f76b15;
-  --hl-green: #30a46c;
-  --hl-blue: #3e8ef7;
-  --hl-purple: #8e4ec6;
-  --hl-pink: #e93d82;
-  /* how strong the marker stroke is */
-  --hl-mix: 40%;
   font-family: Inter, system-ui, -apple-system, sans-serif;
   color-scheme: light;
 }
@@ -50,7 +43,6 @@
     --sp2: #f0974a;
     --sp3: #5fcf8f;
     --sp4: #b893f5;
-    --hl-mix: 50%;
     color-scheme: dark;
   }
 }
@@ -73,7 +65,6 @@
   --sp2: #f0974a;
   --sp3: #5fcf8f;
   --sp4: #b893f5;
-  --hl-mix: 50%;
   color-scheme: dark;
 }
 * { box-sizing: border-box; }
@@ -144,38 +135,6 @@ select { background: var(--panel); border: 1px solid var(--line); border-radius:
 .w.sel.sel-first.sel-last { border-radius: 4px; }
 .w.cur { box-shadow: inset 0 -3px 0 var(--cur); }
 .w.clip { outline: 1.5px dashed var(--accent); outline-offset: 1px; opacity: 0.75; }
-
-/* colour highlights: a marker stroke over the lower half of the line, so it never looks like the solid selection */
-.hl-red { --c: var(--hl-red); }
-.hl-orange { --c: var(--hl-orange); }
-.hl-green { --c: var(--hl-green); }
-.hl-blue { --c: var(--hl-blue); }
-.hl-purple { --c: var(--hl-purple); }
-.hl-pink { --c: var(--hl-pink); }
-.w.hl, .gap.hl { background: linear-gradient(transparent 52%, color-mix(in srgb, var(--c) var(--hl-mix), transparent) 52%); border-radius: 0; }
-.hl-strip { position: absolute; top: 2px; height: 5px; border-radius: 2px; background: var(--c); pointer-events: none; }
-.swatch { width: 16px; height: 16px; border-radius: 50%; padding: 0 !important; background: var(--c) !important; border: 2px solid var(--panel) !important; box-shadow: 0 0 0 1px var(--line); flex: none; }
-.selbar .swatch { margin: 0 3px; align-self: center; }
-.selbar .swatch:hover { transform: scale(1.15); }
-.selbar .sep { width: 1px; align-self: stretch; background: var(--line); margin: 2px 3px; }
-.selbar .unmark { color: var(--muted); }
-.highlights-toggle.on { background: var(--sel); color: var(--sel-fg); }
-.hl-panel section { margin: 0 0 18px; }
-.hl-panel .grp { display: flex; align-items: center; gap: 8px; margin-bottom: 6px; font-size: 13px; }
-.hl-panel .grp input { flex: 1; min-width: 0; color: var(--muted); background: transparent; border: 1px solid transparent; border-radius: 6px; padding: 2px 6px; font-size: 13px; }
-.hl-panel .grp input:hover, .hl-panel .grp input:focus { border-color: var(--line); background: var(--bg); color: var(--fg); }
-.hl-panel .dot.swatch { width: 12px; height: 12px; border: 0 !important; box-shadow: none; }
-.clip { display: flex; align-items: stretch; margin-bottom: 4px; border: 1px solid var(--line); border-left: 3px solid var(--c); border-radius: 6px; }
-.clip-main { all: unset; flex: 1; min-width: 0; display: grid; grid-template-columns: 40px 1fr auto; gap: 8px; padding: 7px 10px; font-size: 13px; cursor: pointer; border-radius: 6px 0 0 6px; }
-.clip-main:hover { background: var(--bg); }
-.clip-main:focus-visible { outline: 2px solid var(--accent); }
-.clip .t { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.clip-x { padding: 0 8px; font-size: 12px; color: var(--muted); opacity: 0; border-radius: 0 6px 6px 0; }
-.clip:hover .clip-x, .clip-x:focus-visible { opacity: 1; }
-.hl-panel .build { border-top: 1px solid var(--line); padding-top: 14px; margin-top: 8px; }
-.hl-panel .checks { display: flex; flex-wrap: wrap; gap: 10px 14px; margin-bottom: 10px; font-size: 13px; }
-.hl-panel .checks label { display: inline-flex; align-items: center; gap: 5px; }
-.hl-panel .note { font-size: 12px; color: var(--muted); line-height: 1.45; margin: 0 0 10px; }
 
 /* pause chips */
 .pause { display: inline-block; font-size: 11px; line-height: 18px; color: var(--muted); border: 1px dashed var(--muted); border-radius: 99px; padding: 0 7px; margin: 0 2px; vertical-align: 2px; cursor: pointer; background: none; font-variant-numeric: tabular-nums; }
@@ -252,93 +211,29 @@ kbd { font: 12px ui-monospace, monospace; border: 1px solid var(--line); border-
   .para-label { flex-direction: row; gap: 8px; }
 }
 
-/* autosave: saved state next to the name, Projects drawer, reopen notice */
-.save-state { margin-left: 10px; font-size: 12px; font-weight: 400; color: var(--muted); display: inline-flex; align-items: center; gap: 5px; vertical-align: 1px; }
-.save-state i { width: 7px; height: 7px; border-radius: 50%; background: var(--muted); }
-.save-state.saved i { background: #2e8b57; }
-.save-state.saving i { background: #e0a020; }
-.save-state.error, .save-state.off { color: var(--danger); }
-.save-state.error i, .save-state.off i { background: var(--danger); }
-.panel-toggle.on { background: var(--sel); color: var(--sel-fg); }
-.projects-panel .new { width: 100%; margin-bottom: 12px; }
-.project { display: flex; align-items: stretch; border: 1px solid transparent; border-radius: 10px; margin-bottom: 2px; }
-.project:hover { background: var(--bg); }
-.project.on { border-color: var(--accent); background: var(--sel); color: var(--sel-fg); }
-.project-main { all: unset; flex: 1; min-width: 0; display: grid; gap: 2px; padding: 9px 10px; cursor: pointer; border-radius: 10px 0 0 10px; }
-.project.on .project-main { cursor: default; }
-.project-main:focus-visible { outline: 2px solid var(--accent); }
-.project-main b { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.project-main span { font-size: 12px; color: var(--muted); }
-.project.on .project-main span { color: inherit; opacity: 0.8; }
-.project-x { padding: 0 10px; color: var(--muted); opacity: 0; }
-.project:hover .project-x, .project-x:focus-visible { opacity: 1; }
-.project.on .project-x { color: inherit; }
-.projects-panel .note { font-size: 12px; color: var(--muted); line-height: 1.45; margin-top: 14px; }
-.notice { position: fixed; left: 50%; bottom: 20px; transform: translateX(-50%); z-index: 30; max-width: calc(100% - 32px); background: var(--fg); color: var(--bg); border-radius: 10px; padding: 9px 14px; font-size: 13px; box-shadow: 0 8px 24px rgba(0, 0, 0, 0.25); cursor: pointer; }
+body { padding: 0 16px 40px; height: auto; }
+h1.t { max-width: 1000px; margin: 24px auto 4px; font-size: 22px; }
+p.lead { max-width: 1000px; margin: 0 auto; color: var(--muted); line-height: 1.5; }
+.cap { max-width: 1000px; margin: 24px auto 10px; font-size: 13px; color: var(--muted); line-height: 1.5; }
+.cap b { color: var(--fg); }
+.frame { max-width: 1000px; margin: 0 auto 30px; border: 1px solid var(--line); border-radius: 12px; overflow: hidden; background: var(--bg); position: relative; }
+.frame .doc { overflow: visible; padding: 28px 20px 30px; }
+kbd { font: 12px ui-monospace, monospace; border: 1px solid var(--line); border-bottom-width: 2px; border-radius: 4px; padding: 0 4px; background: var(--panel); }
+.para { position: relative; }
 
-/* paragraph moves: view switch, ↑ ↓ under the speaker name, outline rows (mockups/para-c-outline.html) */
-.viewbar { display: flex; align-items: center; flex-wrap: wrap; gap: 8px 12px; margin-bottom: 20px; font-size: 13px; }
-.viewbar-hint kbd { font-size: 11px; }
-.seg { display: inline-flex; border: 1px solid var(--line); border-radius: 8px; overflow: hidden; }
-.seg button { border: 0; border-radius: 0; padding: 5px 10px; font-size: 13px; color: var(--muted); background: transparent; }
-.seg button.on { background: var(--sel); color: var(--sel-fg); }
-.para-label .mv { display: flex; gap: 2px; margin-top: 4px; visibility: hidden; }
-.para:hover .para-label .mv, .para.has-sel .para-label .mv, .para-label .mv:focus-within { visibility: visible; }
-.mv button, .orow .arr button { padding: 0 7px; font-size: 13px; line-height: 22px; border-radius: 6px; color: var(--muted); font-weight: 400; }
-.mv button:hover:not(:disabled), .orow .arr button:hover:not(:disabled) { color: var(--fg); background: var(--bg); border-color: var(--line); }
-.mv button:disabled, .orow .arr button:disabled { visibility: hidden; }
-.flash { animation: flash 1.4s ease-out; border-radius: 8px; }
-@keyframes flash {
-  0%, 40% { background: color-mix(in srgb, var(--accent) 16%, transparent); box-shadow: 0 0 0 8px color-mix(in srgb, var(--accent) 16%, transparent); }
-  100% { background: transparent; box-shadow: 0 0 0 8px transparent; }
-}
-.outline { display: grid; gap: 6px; }
-.orow { display: grid; grid-template-columns: 18px 76px minmax(0, 1fr) auto auto; align-items: center; gap: 10px; background: var(--panel); border: 1px solid var(--line); border-left: 4px solid var(--c); border-radius: 8px; padding: 6px 8px 6px 6px; font-size: 13px; cursor: pointer; user-select: none; }
-.orow:hover { border-color: var(--muted); border-left-color: var(--c); }
-.orow.on { border-color: var(--accent); border-left-color: var(--c); box-shadow: 0 0 0 1px var(--accent); }
-.orow.flash { animation: flash 1.4s ease-out; }
-.orow .grip { color: var(--muted); cursor: grab; letter-spacing: -2px; text-align: center; }
-.orow .who b { display: block; color: var(--c); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.orow .who span { font-size: 12px; }
-.orow .txt { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.orow .txt .dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; background: var(--c); margin-right: 5px; vertical-align: 1px; }
-.orow .len { font-size: 12px; }
-.orow .arr { display: flex; gap: 2px; }
-.drop-line { height: 3px; margin: -4px 0; background: var(--accent); border-radius: 2px; }
-@media (max-width: 700px) {
-  .orow { grid-template-columns: 14px minmax(0, 1fr) auto; }
-  .orow .who { grid-column: 2; display: flex; gap: 8px; }
-  .orow .txt { grid-column: 2; }
-  .orow .len { display: none; }
-  .orow .arr { grid-column: 3; grid-row: 1 / span 2; }
-  .orow .grip { grid-row: 1 / span 2; }
-}
-
-/* edited timeline (mockups/wave-b-edited.html): moved passages, joins, original strip */
-.moved-box { position: absolute; top: 0; bottom: 0; background: color-mix(in srgb, var(--sp2) 10%, transparent); pointer-events: none; overflow: hidden; }
-.moved-box .tag { position: absolute; top: 9px; left: 4px; font-size: 10px; line-height: 14px; padding: 0 5px; border-radius: 4px; background: var(--panel); border: 1px solid var(--line); color: var(--muted); white-space: nowrap; }
-.join { position: absolute; top: 0; bottom: 0; width: 0; border-left: 1.5px solid var(--danger); opacity: 0.7; pointer-events: none; }
-.join::after { content: ''; position: absolute; bottom: 0; left: -5.75px; border: 5px solid transparent; border-top: 0; border-bottom: 6px solid var(--danger); }
-.orig { margin-left: 130px; }
-.orig-toggle { padding: 2px 8px; font-size: 12px; color: var(--muted); margin-left: -8px; }
-.orig-strip { position: relative; height: 20px; margin-top: 4px; border: 1px solid var(--line); border-radius: 5px; overflow: hidden; cursor: pointer; }
-.orig-strip canvas { position: absolute; inset: 0; width: 100%; height: 100%; }
-.moved-src { position: absolute; top: 0; bottom: 0; background: color-mix(in srgb, var(--sp2) 32%, transparent); pointer-events: none; }
-@media (max-width: 700px) { .orig { margin-left: 0; } }
-
-/* zoom: buttons in the play row, overview strip with a window (mockups/zoom-b-overview.html) */
-.zoombox { display: inline-flex; align-items: center; gap: 2px; margin-left: auto; border: 1px solid var(--line); border-radius: 8px; padding: 1px; }
-.zoombox button { border: 0; padding: 2px 9px; font-size: 13px; background: transparent; border-radius: 6px; }
-.zoombox button:hover:not(:disabled) { background: var(--bg); }
-.zoombox span { font-size: 12px; color: var(--muted); min-width: 34px; text-align: center; }
-.overview { position: relative; height: 26px; margin: 2px 0 0 130px; border: 1px solid var(--line); border-radius: 6px; overflow: hidden; cursor: pointer; touch-action: none; user-select: none; }
-.overview canvas { position: absolute; inset: 0; width: 100%; height: 100%; }
-.overview .dim { position: absolute; top: 0; bottom: 0; background: color-mix(in srgb, var(--panel) 55%, transparent); pointer-events: none; }
-.overview .win { position: absolute; top: 0; bottom: 0; border: 2px solid var(--accent); border-radius: 6px; background: color-mix(in srgb, var(--accent) 10%, transparent); cursor: grab; box-sizing: border-box; min-width: 8px; }
-.overview .win:active { cursor: grabbing; }
-.overview .edge { position: absolute; top: 0; bottom: 0; width: 9px; cursor: ew-resize; }
-.overview .edge::after { content: ''; position: absolute; top: 5px; bottom: 5px; left: 3px; width: 3px; border-radius: 2px; background: var(--accent); }
-.overview .edge.l { left: -5px; }
-.overview .edge.r { right: -5px; }
-@media (max-width: 700px) { .overview { margin-left: 0; } }
-.transport .reset { padding: 2px 8px; font-size: 12px; }
+.para.on { outline: 1.5px solid var(--accent); outline-offset: 8px; border-radius: 4px; }
+.blockbar { position: absolute; top: -50px; left: 0; display: flex; align-items: center; gap: 2px; background: var(--panel); border: 1px solid var(--line); border-radius: 10px; box-shadow: 0 8px 24px rgba(0,0,0,.14); padding: 3px; z-index: 5; font-size: 13px; }
+.blockbar button { border: 0; background: transparent; padding: 4px 8px; border-radius: 7px; }
+.blockbar button:hover { background: var(--bg); }
+.blockbar .grip { cursor: grab; color: var(--muted); letter-spacing: -2px; }
+.blockbar .sep { width: 1px; align-self: stretch; background: var(--line); margin: 3px 4px; }
+.blockbar .dot { width: 14px; height: 14px; border-radius: 50%; display: inline-block; vertical-align: -2px; }
+.drop-line { height: 3px; background: var(--accent); border-radius: 2px; margin: -12px 0 9px 104px; }
+.ghostp { opacity: .45; }
+.para.dragging { opacity: .9; transform: rotate(-.4deg); box-shadow: 0 12px 30px rgba(0,0,0,.18); background: var(--panel); border-radius: 8px; outline: 0; }
+</style></head><body><h1 class="t">Paragraph moves B: Paragraphs as blocks</h1><p class="lead">Closest to Gutenberg: a paragraph becomes a block you select, with its own toolbar and a drag handle.</p>
+<p class="cap"><b>Click a paragraph's speaker name</b> (or the space beside it) to select the whole paragraph, like a Gutenberg block. A toolbar appears: drag handle, ↑ ↓, speaker, highlight, cut, delete. Same keys as A: <kbd>⌥⇧↑</kbd> / <kbd>⌥⇧↓</kbd>.</p>
+<div class="frame"><div class="doc" style="padding-top:70px"><div class="doc-inner"><div class="para "><div class="para-label" style="color:var(--sp1)">Ann<span class="ts">0:00</span></div><p><span class="w">Welcome</span> <span class="w">to</span> <span class="w">the</span> <span class="w">show.</span> <span class="w">Today</span> <span class="w">we</span> <span class="w">are</span> <span class="w">going</span> <span class="w">to</span> <span class="w">talk</span> <span class="w">about</span> <span class="w">editing</span> <span class="w">audio</span> <span class="w">in</span> <span class="w">the</span> <span class="w">browser.</span></p></div><div class="para on"><div class="blockbar"><button class="grip" title="Drag to move">⋮⋮</button><button title="Move up">↑</button><button title="Move down">↓</button><span class="sep"></span><button>Ben ▾</button><span class="sep"></span><button title="Highlight red"><i class="dot" style="background:#e5484d"></i></button><button title="Highlight blue"><i class="dot" style="background:#3b82f6"></i></button><button>…</button><span class="sep"></span><button>Cut</button><button style="color:var(--danger)">Delete</button></div><div class="para-label" style="color:var(--sp2)">Ben<span class="ts">0:09</span></div><p><span class="w">Thanks</span> <span class="w">for</span> <span class="w">having</span> <span class="w">me.</span> <span class="w">I</span> <span class="w">have</span> <span class="w">been</span> <span class="w">editing</span> <span class="w">podcasts</span> <span class="w">for</span> <span class="w">ten</span> <span class="w">years,</span> <span class="w">mostly</span> <span class="w">by</span> <span class="w">hand.</span></p></div><div class="para "><div class="para-label" style="color:var(--sp1)">Ann<span class="ts">0:21</span></div><p><span class="w">So</span> <span class="w">what</span> <span class="w">changed?</span> <span class="w">Why</span> <span class="w">move</span> <span class="w">to</span> <span class="w">editing</span> <span class="w">the</span> <span class="w">transcript</span> <span class="w">instead</span> <span class="w">of</span> <span class="w">the</span> <span class="w">waveform?</span></p></div><div class="para "><div class="para-label" style="color:var(--sp2)">Ben<span class="ts">0:30</span></div><p><span class="w">Speed.</span> <span class="w">You</span> <span class="w">read</span> <span class="w">faster</span> <span class="w">than</span> <span class="w">you</span> <span class="w">listen,</span> <span class="w">so</span> <span class="w">finding</span> <span class="w">the</span> <span class="w">bad</span> <span class="w">bits</span> <span class="w">takes</span> <span class="w">minutes,</span> <span class="w">not</span> <span class="w">hours.</span></p></div></div></div></div>
+<p class="cap"><b>Or drag it by the handle.</b> A blue line shows where it will land.</p>
+<div class="frame"><div class="doc"><div class="doc-inner"><div class="para "><div class="para-label" style="color:var(--sp1)">Ann<span class="ts">0:00</span></div><p><span class="w">Welcome</span> <span class="w">to</span> <span class="w">the</span> <span class="w">show.</span> <span class="w">Today</span> <span class="w">we</span> <span class="w">are</span> <span class="w">going</span> <span class="w">to</span> <span class="w">talk</span> <span class="w">about</span> <span class="w">editing</span> <span class="w">audio</span> <span class="w">in</span> <span class="w">the</span> <span class="w">browser.</span></p></div><div class="para "><div class="para-label" style="color:var(--sp1)">Ann<span class="ts">0:21</span></div><p><span class="w">So</span> <span class="w">what</span> <span class="w">changed?</span> <span class="w">Why</span> <span class="w">move</span> <span class="w">to</span> <span class="w">editing</span> <span class="w">the</span> <span class="w">transcript</span> <span class="w">instead</span> <span class="w">of</span> <span class="w">the</span> <span class="w">waveform?</span></p></div><div class="drop-line"></div><div class="para dragging"><div class="para-label" style="color:var(--sp2)">Ben<span class="ts">0:09</span></div><p><span class="w">Thanks</span> <span class="w">for</span> <span class="w">having</span> <span class="w">me.</span> <span class="w">I</span> <span class="w">have</span> <span class="w">been</span> <span class="w">editing</span> <span class="w">podcasts</span> <span class="w">for</span> <span class="w">ten</span> <span class="w">years,</span> <span class="w">mostly</span> <span class="w">by</span> <span class="w">hand.</span></p></div><div class="para "><div class="para-label" style="color:var(--sp2)">Ben<span class="ts">0:30</span></div><p><span class="w">Speed.</span> <span class="w">You</span> <span class="w">read</span> <span class="w">faster</span> <span class="w">than</span> <span class="w">you</span> <span class="w">listen,</span> <span class="w">so</span> <span class="w">finding</span> <span class="w">the</span> <span class="w">bad</span> <span class="w">bits</span> <span class="w">takes</span> <span class="w">minutes,</span> <span class="w">not</span> <span class="w">hours.</span></p></div></div></div></div>
+</body></html>

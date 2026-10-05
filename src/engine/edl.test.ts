@@ -2,12 +2,15 @@ import { describe, expect, it } from 'vitest';
 import {
   deleteWords,
   displayWords,
+  findPauses,
   fullSegments,
   isFillerText,
+  MOVE_PAD,
   moveWords,
   outputDuration,
   outputToSource,
   removeSpan,
+  shortenPauses,
   sourceToOutput,
 } from './edl';
 import type { Word } from './types';
@@ -23,6 +26,10 @@ const words: Word[] = ['a', 'b', 'c', 'd', 'e'].map((text, i) => ({
 const base = () => fullSegments(6);
 const order = (segs = base()) =>
   displayWords(words, segs)
+    .map((d) => (d.deleted ? `-${d.word.text}` : d.word.text))
+    .join(' ');
+const order2 = (ws: Word[], segs: { id: string; start: number; end: number }[]) =>
+  displayWords(ws, segs)
     .map((d) => (d.deleted ? `-${d.word.text}` : d.word.text))
     .join(' ');
 const close = (segs: { start: number; end: number }[]) =>
@@ -92,6 +99,53 @@ describe('moveWords', () => {
   it('deleting the last word also removes trailing audio', () => {
     expect(outputDuration(deleteWords(base(), words, ['e']))).toBeCloseTo(4.7, 3);
   });
+  it('leaves most of a long pause behind instead of carrying it along', () => {
+    // a=[0,1], 4 s pause, b=[5,6], c=[6.2,7.2]
+    const ws: Word[] = [
+      { id: 'a', text: 'a', start: 0, end: 1, trackId: 't1' },
+      { id: 'b', text: 'b', start: 5, end: 6, trackId: 't1' },
+      { id: 'c', text: 'c', start: 6.2, end: 7.2, trackId: 't1' },
+    ];
+    const segs = moveWords(fullSegments(7.2), ws, ['b'], 'a', 'before');
+    const moved = segs.find((s) => s.start <= 5 && s.end >= 6)!;
+    expect(moved.start).toBeCloseTo(5 - MOVE_PAD, 6); // not 3 (half of the 4 s pause)
+    expect(outputDuration(segs)).toBeCloseTo(7.2, 6); // nothing lost: the pause stays at the old place
+  });
+  it('pastes right next to a target word that follows a long pause', () => {
+    // a=[0,1], b=[1.2,2.2], 4 s pause, c=[6.2,7.2]: paste a before c
+    const ws: Word[] = [
+      { id: 'a', text: 'a', start: 0, end: 1, trackId: 't1' },
+      { id: 'b', text: 'b', start: 1.2, end: 2.2, trackId: 't1' },
+      { id: 'c', text: 'c', start: 6.2, end: 7.2, trackId: 't1' },
+    ];
+    const segs = moveWords(fullSegments(7.2), ws, ['a'], 'c', 'before');
+    expect(order2(ws, segs)).toBe('b a c');
+    // the segment after the moved piece starts just before c, so the pause comes before "a", not after it
+    const after = segs[segs.findIndex((s) => s.start === 0) + 1];
+    expect(after.start).toBeCloseTo(6.2 - MOVE_PAD, 6);
+  });
+  it('still moves when the gap before the target was cut away', () => {
+    // remove the whole b to c gap, so the usual insertion point (halfway into it) no longer plays
+    const cut = removeSpan(base(), 2.2, 2.4);
+    expect(order(moveWords(cut, words, ['e'], 'c', 'before'))).toBe('a b e c d');
+  });
+  it('does not drag along audio that plays elsewhere', () => {
+    // move c to the front, then move d before b: d's span must not swallow the piece c left behind
+    const once = moveWords(base(), words, ['c'], 'a', 'before');
+    const twice = moveWords(once, words, ['d'], 'b', 'before');
+    expect(order(twice)).toBe('c a d b e');
+    expect(outputDuration(twice)).toBeCloseTo(6, 6);
+  });
+  it('inserts by the target even when a leftover piece elsewhere ends at the same time', () => {
+    // a scrap of silence [2.0, 2.3] plays after c's segment and ends where c's segment starts
+    const frag = [
+      { id: 's1', start: 0, end: 2.0 },
+      { id: 's2', start: 2.3, end: 3.5 },
+      { id: 's3', start: 2.0, end: 2.3 },
+      { id: 's4', start: 3.5, end: 6 },
+    ];
+    expect(order(moveWords(frag, words, ['e'], 'c', 'before'))).toBe('a b e c d');
+  });
   it('works after a delete', () => {
     const cut = deleteWords(base(), words, ['c']);
     expect(order(moveWords(cut, words, ['e'], 'a', 'before'))).toBe('e a b -c d');
@@ -116,5 +170,46 @@ describe('isFillerText', () => {
   it('matches fillers regardless of case and punctuation', () => {
     expect(isFillerText(' Um,')).toBe(true);
     expect(isFillerText('umbrella')).toBe(false);
+  });
+});
+
+describe('pauses', () => {
+  // x=[0.5,1] y=[3,4] z=[4.1,5], recording 0 to 8: 0.5 s lead-in, 2 s gap, 3 s tail
+  const pw: Word[] = [
+    { id: 'x', text: 'x', start: 0.5, end: 1, trackId: 't1' },
+    { id: 'y', text: 'y', start: 3, end: 4, trackId: 't1' },
+    { id: 'z', text: 'z', start: 4.1, end: 5, trackId: 't1' },
+  ];
+  const segs = fullSegments(8);
+  const found = (s = segs, min = 1) => findPauses(displayWords(pw, s), s, min);
+
+  it('finds gaps, lead-in and tail longer than the minimum', () => {
+    expect(found()).toEqual([
+      { pieces: [[1, 3]], length: 2, afterId: 'x', beforeId: 'y' },
+      { pieces: [[5, 8]], length: 3, afterId: 'z' },
+    ]);
+    expect(found(segs, 0.4)[0]).toEqual({ pieces: [[0, 0.5]], length: 0.5, beforeId: 'x' });
+  });
+
+  it('measures a gap across a cut by what is still heard', () => {
+    // 2 s gap minus a 0.5 s cut: 1.5 s still plays, in two pieces either side of the seam
+    const p = found(removeSpan(segs, 1.5, 2))[0];
+    expect(p.pieces).toEqual([[1, 1.5], [2, 3]]);
+    expect(p.length).toBeCloseTo(1.5);
+    // cut most of it: 0.9 s left is under the minimum
+    expect(found(removeSpan(segs, 1.5, 2.6)).map((q) => q.afterId)).toEqual(['z']);
+  });
+
+  it('shortens a pause across a seam, keeping half on each side', () => {
+    const cut = removeSpan(segs, 1.5, 2);
+    const out = shortenPauses(cut, found(cut).slice(0, 1), 0.4);
+    expect(close(out)).toEqual([[0, 1.2], [2.8, 8]]);
+  });
+
+  it('shortens each pause to the kept length, keeping half on each side of a gap', () => {
+    const out = shortenPauses(segs, found(), 0.4);
+    expect(close(out)).toEqual([[0, 1.2], [2.8, 5.2]]);
+    expect(outputDuration(out)).toBeCloseTo(8 - 1.6 - 2.8);
+    expect(found(out)).toEqual([]);
   });
 });
