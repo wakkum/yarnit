@@ -1,13 +1,14 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { displayWords, findPauses } from '../engine/edl';
 import { passages, wordColors } from '../engine/highlights';
+import { isSpeech } from '../engine/types';
 import { searchHits } from '../engine/view';
 import { useStore, type Settings } from '../state/store';
 import { combo, isMac } from './keys';
 import { clock } from './time';
 
 export function TopBar() {
-  const project = useStore((s) => s.project);
+  const recording = useStore((s) => s.recording);
   const query = useStore((s) => s.query);
   const hitIndex = useStore((s) => s.hitIndex);
   const canUndo = useStore((s) => s.past.length > 0);
@@ -20,16 +21,16 @@ export function TopBar() {
   const [menu, setMenu] = useState(false);
   const menuRef = useRef<HTMLDivElement>(null);
 
-  const display = useMemo(() => (project ? displayWords(project.words, project.segments) : []), [project]);
+  const display = useMemo(() => (recording ? displayWords(recording.words, recording.segments) : []), [recording]);
   const hits = useMemo(() => searchHits(display, query), [display, query]);
   const fillers = useMemo(() => display.filter((d) => !d.deleted && d.word.isFiller).length, [display]);
   const highlightCount = useMemo(
-    () => (project ? passages(display, project.segments, wordColors(project.words, project.highlights)).length : 0),
-    [display, project],
+    () => (recording ? passages(display, recording.segments, wordColors(recording.words, recording.highlights)).length : 0),
+    [display, recording],
   );
   const pauses = useMemo(
-    () => (project && phase === 'ready' ? findPauses(display, project.segments, settings.pauseMin) : []),
-    [display, project, phase, settings.pauseMin],
+    () => (recording && phase === 'ready' ? findPauses(display, recording.segments, settings.pauseMin) : []),
+    [display, recording, phase, settings.pauseMin],
   );
 
   useEffect(() => {
@@ -40,15 +41,18 @@ export function TopBar() {
   }, [menu]);
 
   const busy = phase === 'decoding' || phase === 'exporting';
+  // music and sound effects have no transcript to search, highlight or tidy
+  const speech = !recording || isSpeech(recording.kind);
 
   return (
     <header className="top">
       <span className="name">
-        {project ? project.name : 'Yarnit'}
-        {project && <SaveState />}
+        {recording ? recording.name : 'Yarnit'}
+        {recording && <SaveState />}
       </span>
-      {project && (
+      {recording && (
         <>
+          {speech && (
           <div className="search">
             <input
               type="search"
@@ -80,12 +84,15 @@ export function TopBar() {
               </>
             )}
           </div>
+          )}
           <button className="ghost" onClick={undo} disabled={!canUndo} title={`Undo (${combo('mod', 'Z')})`}>
             Undo
           </button>
           <button className="ghost" onClick={redo} disabled={!canRedo} title={`Redo (${isMac ? combo('shift', 'mod', 'Z') : combo('mod', 'Y')})`}>
             Redo
           </button>
+          {speech && (
+          <>
           <button
             className={`highlights-toggle${panel === 'highlights' ? ' on' : ''}`}
             onClick={() => setPanel(panel === 'highlights' ? null : 'highlights')}
@@ -98,6 +105,8 @@ export function TopBar() {
           <button onClick={removeFillers} disabled={!fillers}>
             Remove fillers{fillers ? ` (${fillers})` : ''}
           </button>
+          </>
+          )}
           <ProjectsToggle />
           <div className="menu" ref={menuRef}>
             <button className="primary" onClick={() => setMenu(!menu)} disabled={busy}>
@@ -128,7 +137,7 @@ export function TopBar() {
           </div>
         </>
       )}
-      {!project && <ProjectsToggle />}
+      {!recording && <ProjectsToggle />}
       <div className="theme" role="group" aria-label="Theme">
         {(['auto', 'light', 'dark'] as Settings['theme'][]).map((t) => (
           <button
@@ -161,7 +170,7 @@ function ProjectsToggle() {
       className={`ghost panel-toggle${on ? ' on' : ''}`}
       onClick={() => useStore.getState().setPanel(on ? null : 'projects')}
       aria-expanded={on}
-      title="Switch project, start a new one, or delete one"
+      title="Switch recording, start a new one, or delete one"
     >
       Projects
     </button>

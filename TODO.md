@@ -29,6 +29,15 @@
 - [ ] Keep undo history across reopen (maybe the last N steps)
 - [ ] SRT/VTT export with edited timestamps
 
+## Projects (6 Oct 2026)
+- [x] Projects with several recordings, collapsible sidebar, "What is this recording?" on add, background transcription queue, v1 saves migrated
+- [ ] **User testing** of projects before the main timeline
+- [ ] Main timeline: Send to main (copy) from a recording, whole edit or chosen colours; its own transcript, waveform, editing and export
+- [x] Parts for music and sound effects: mark pieces on the waveform, pads to play and rename (6 Oct 2026)
+- [x] Waveform selection on speech too: Delete, Add as part, parts strip and marks in the transcript (6 Oct 2026)
+- [ ] Music and sound effects on the main timeline (own lane): Send to main per part, fades, volume under speech
+- [ ] Reorder recordings in the sidebar (drag)
+
 ## Highlights
 - [x] Six-colour highlights, marker look, Highlights panel with passages and colour meanings, timeline strips (5 Oct 2026)
 - [ ] **Send chosen colours to a main timeline.** Design: highlight spans become the segments of a new edit (in transcript order), so the project needs more than one edit ("timelines": source edit + main). Decide with the user: replace the edit (undoable) vs a separate main timeline you can switch to, and whether a passage can be reordered there. With multitrack, each span takes every track.

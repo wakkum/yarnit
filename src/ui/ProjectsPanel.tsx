@@ -1,6 +1,6 @@
-// Projects drawer (mockups/save-b-drawer.html, picked 5 Oct 2026): every autosaved project,
-// newest first. Click one to switch to it; the current one is marked.
-import { useEffect, useRef, useState } from 'react';
+// Projects drawer (mockups/save-b-drawer.html, picked 5 Oct 2026; projects hold several recordings
+// since 6 Oct): every saved project, newest first. Click one to switch to it.
+import { useEffect, useState } from 'react';
 import type { ProjectSummary } from '../engine/save';
 import { useStore } from '../state/store';
 import { ago } from './time';
@@ -9,11 +9,10 @@ import { fmt } from './util';
 export function ProjectsPanel() {
   const library = useStore((s) => s.library);
   const currentId = useStore((s) => s.project?.id);
-  const { setPanel, refreshLibrary, loadFile } = useStore.getState();
-  const input = useRef<HTMLInputElement>(null);
+  const { setPanel, refreshLibrary, newProject } = useStore.getState();
   const [now] = useState(() => Date.now());
 
-  // the list also changes while a project is open (its own summary), so reload it whenever the drawer opens
+  // names and lengths change while a project is open, so reload the list whenever the drawer opens
   useEffect(() => void refreshLibrary(), [refreshLibrary]);
 
   return (
@@ -24,20 +23,9 @@ export function ProjectsPanel() {
           ✕
         </button>
       </div>
-      <button className="primary new" onClick={() => input.current?.click()}>
-        New project from audio file
+      <button className="primary new" onClick={() => void newProject().then(() => setPanel(null))}>
+        New project
       </button>
-      <input
-        ref={input}
-        type="file"
-        accept="audio/*"
-        hidden
-        onChange={(e) => {
-          const f = e.target.files?.[0];
-          e.target.value = '';
-          if (f) void loadFile(f);
-        }}
-      />
       {library.length ? (
         library.map((p) => <Item key={p.id} p={p} current={p.id === currentId} now={now} />)
       ) : (
@@ -52,17 +40,13 @@ export function ProjectsPanel() {
 }
 
 function Item({ p, current, now }: { p: ProjectSummary; current: boolean; now: number }) {
-  const { openSaved, deleteSaved } = useStore.getState();
-  const detail = [
-    p.edited < p.duration - 0.05 ? `${fmt(p.edited)} of ${fmt(p.duration)}` : fmt(p.duration),
-    p.transcribed ? `${p.words.toLocaleString()} words` : 'transcript not finished',
-    p.highlights ? `${p.highlights} highlight${p.highlights === 1 ? '' : 's'}` : '',
-  ].filter(Boolean);
+  const { openProject, deleteProject } = useStore.getState();
+  const detail = [`${p.recordings} recording${p.recordings === 1 ? '' : 's'}`, p.recordings ? fmt(p.duration) : ''].filter(Boolean);
   return (
     <div className={`project${current ? ' on' : ''}`}>
       <button
         className="project-main"
-        onClick={() => !current && void openSaved(p.id)}
+        onClick={() => !current && void openProject(p.id)}
         aria-current={current || undefined}
         title={current ? 'Open now' : `Open ${p.name}`}
       >
@@ -74,7 +58,11 @@ function Item({ p, current, now }: { p: ProjectSummary; current: boolean; now: n
         className="ghost project-x"
         title="Delete project"
         aria-label={`Delete ${p.name}`}
-        onClick={() => confirm(`Delete ${p.name}? Its transcript and edits are removed from this browser. Your original audio file is not touched.`) && void deleteSaved(p)}
+        onClick={() =>
+          confirm(
+            `Delete the project ${p.name} and its ${p.recordings} recording${p.recordings === 1 ? '' : 's'}? Transcripts and edits are removed from this browser. Your original audio files are not touched.`,
+          ) && void deleteProject(p.id)
+        }
       >
         ✕
       </button>

@@ -2,101 +2,36 @@
 // what plays and exports. Moved passages are orange, joins get a red mark, and "Show original" opens a
 // thin strip of the untouched recording. Zoom (mockups/zoom-b-overview.html with the buttons of
 // zoom-a-buttons.html): an overview of the whole edit with a window you drag and stretch, plus − / + / Fit.
-import { useEffect, useMemo, useRef } from 'react';
-import { WHISPER_SAMPLE_RATE } from '../audio/decode';
-import { outputDuration } from '../engine/edl';
+// Drag across the waveform to select (mockups/parts-a-list.html for music, speech-parts-c-margin.html for
+// speech): play it, cut it (speech only) or make it a part. Parts show as coloured regions whose edges
+// can be dragged.
+import { useEffect, useLayoutEffect, useMemo, useRef } from 'react';
+import { outputDuration, outputToSource } from '../engine/edl';
+import { labelRows, setPartEdge } from '../engine/parts';
+import { isSpeech, type Part } from '../engine/types';
 import { editedPieces, movedPassages, tickStep, toOutputSpans, type Piece, type ZoomView } from '../engine/view';
 import { media, useStore } from '../state/store';
 import { combo } from './keys';
-import { cutRegions, fmt, trackColor, trackLabel, usePlayhead } from './util';
+import { PartsStrip } from './Parts';
+import { Waveform } from './Waveform';
+import { cutRegions, fmt, rangeLabel, trackColor, trackLabel, usePlayhead } from './util';
 
-const MOVED_COLOR = 'var(--sp2)';
+/** Music and sound effects: the colour of their sidebar icon. */
+const MUSIC_COLOR = 'var(--sp4)';
 /** How much one wheel notch (deltaY 100) zooms. */
 const WHEEL_ZOOM = 0.006;
 
 /** Ruler label; below 1 s spacing the tenths matter. */
 const tickLabel = (t: number, step: number) => (step < 1 && t % 1 ? `${fmt(t)}.${Math.round((t % 1) * 10)}` : fmt(t));
 
-/** Resolve a `var(--x)` colour for canvas, which can't read CSS variables itself. */
-const resolve = (el: Element, color: string) => getComputedStyle(el).getPropertyValue(color.slice(4, -1)) || '#888';
-
-/**
- * Canvas waveform over an axis of `length` seconds. With `pieces`, the axis is the edited timeline and
- * each x is looked up in the source through the piece that plays there; without, it is the source itself.
- */
-function Waveform({
-  peaks,
-  color,
-  source,
-  length,
-  pieces,
-  from = 0,
-  samples,
-}: {
-  peaks: Float32Array | undefined;
-  color: string;
-  source: number;
-  length: number;
-  pieces?: Piece[];
-  /** Axis start (output or source seconds): the left edge when zoomed in. */
-  from?: number;
-  /** The 16 kHz copy: zoomed in past the peaks' resolution, bars are read from it directly. */
-  samples?: Float32Array | null;
-}) {
-  const ref = useRef<HTMLCanvasElement>(null);
-  useEffect(() => {
-    const canvas = ref.current;
-    if (!canvas || !peaks || length <= 0) return;
-    const draw = () => {
-      const dpr = window.devicePixelRatio || 1;
-      const w = (canvas.width = canvas.clientWidth * dpr);
-      const h = (canvas.height = canvas.clientHeight * dpr);
-      const g = canvas.getContext('2d')!;
-      const main = resolve(canvas, color);
-      const moved = resolve(canvas, MOVED_COLOR);
-      const max = Math.max(0.01, ...peaks);
-      const bar = Math.max(1, Math.floor(2 * dpr));
-      const bucket = source / peaks.length;
-      const perBar = (length / w) * (bar + 1);
-      const fine = samples && perBar < bucket;
-      let pi = 0;
-      for (let x = 0; x < w; x += bar + 1) {
-        const t = from + (x / w) * length;
-        let src = t;
-        let isMoved = false;
-        if (pieces) {
-          // x only grows, so walk the pieces forward instead of searching each time
-          while (pi < pieces.length - 1 && t >= pieces[pi].at + pieces[pi].end - pieces[pi].start) pi++;
-          const p = pieces[pi];
-          if (!p) break;
-          src = p.start + (t - p.at);
-          isMoved = p.moved;
-        }
-        let v: number;
-        if (fine) {
-          const a = Math.max(0, Math.floor(src * WHISPER_SAMPLE_RATE));
-          const b = Math.min(samples.length, Math.ceil((src + perBar) * WHISPER_SAMPLE_RATE));
-          let m = 0;
-          for (let k = a; k < b; k++) m = Math.max(m, Math.abs(samples[k]));
-          v = Math.min(1, m / max);
-        } else {
-          v = peaks[Math.min(peaks.length - 1, Math.max(0, Math.floor((src / source) * peaks.length)))] / max;
-        }
-        const amp = Math.max(1, v * (h / 2 - 2));
-        g.fillStyle = isMoved ? moved : main;
-        g.fillRect(x, h / 2 - amp, bar, amp * 2);
-      }
-    };
-    draw();
-    const ro = new ResizeObserver(draw);
-    ro.observe(canvas);
-    return () => ro.disconnect();
-  }, [peaks, color, source, length, pieces, from, samples]);
-  return <canvas ref={ref} />;
-}
+/** Below this drag distance (px) a press on the waveform is a click: jump there. */
+const DRAG_PX = 4;
+/** Room a part label needs as a share of the visible span: a base plus a share per letter (stacks close labels). */
+const LABEL_BASE = 0.03;
+const LABEL_PER_CHAR = 0.012;
 
 export function Timeline() {
-  const project = useStore((s) => s.project)!;
+  const recording = useStore((s) => s.recording)!;
   const peaks = useStore((s) => s.peaks);
   const playing = useStore((s) => s.playing);
   const phase = useStore((s) => s.phase);
@@ -104,19 +39,26 @@ export function Timeline() {
   const message = useStore((s) => s.message);
   const showOriginal = useStore((s) => s.settings.showOriginal);
   const zoom = useStore((s) => s.zoom);
-  const { togglePlay, seekSource, seekOutput, setSettings, setZoom, zoomBy, resetTimeline } = useStore.getState();
+  const waveSel = useStore((s) => s.waveSel);
+  const { togglePlay, seekSource, setSettings, setZoom, zoomBy, resetTimeline } = useStore.getState();
   const lanes = useRef<HTMLDivElement>(null);
   const clock = useRef<HTMLSpanElement>(null);
   const heads = useRef<(HTMLDivElement | null)[]>([]);
   const origHead = useRef<HTMLDivElement>(null);
 
-  const duration = project.duration;
-  const edited = outputDuration(project.segments);
-  const pieces = useMemo(() => editedPieces(project.segments), [project.segments]);
+  const duration = recording.duration;
+  const edited = outputDuration(recording.segments);
+  const pieces = useMemo(() => editedPieces(recording.segments), [recording.segments]);
   const moves = useMemo(() => movedPassages(pieces), [pieces]);
-  const highlights = useMemo(() => toOutputSpans(pieces, project.highlights), [pieces, project.highlights]);
-  const cuts = useMemo(() => cutRegions(project.segments, duration), [project.segments, duration]);
+  const highlights = useMemo(() => toOutputSpans(pieces, recording.highlights), [pieces, recording.highlights]);
+  const cuts = useMemo(() => cutRegions(recording.segments, duration), [recording.segments, duration]);
+  const music = !isSpeech(recording.kind);
+  const parts = useMemo(() => toOutputSpans(pieces, recording.parts), [pieces, recording.parts]);
   const view: ZoomView = zoom ?? { start: 0, span: Math.max(edited, 0.001) };
+  const rows = useMemo(
+    () => labelRows(parts.map((p) => ({ start: p.outStart, width: view.span * (LABEL_BASE + LABEL_PER_CHAR * p.name.length) }))),
+    [parts, view.span],
+  );
   const step = tickStep(view.span);
   const ticks = useMemo(() => {
     const first = Math.ceil(view.start / step) * step;
@@ -133,7 +75,7 @@ export function Timeline() {
     if (!el) return;
     const onWheel = (e: WheelEvent) => {
       const st = useStore.getState();
-      const total = outputDuration(st.project!.segments);
+      const total = outputDuration(st.recording!.segments);
       const v = st.zoom ?? { start: 0, span: total };
       const r = el.querySelector('.lane-body')!.getBoundingClientRect();
       if (e.ctrlKey || e.metaKey) {
@@ -151,7 +93,7 @@ export function Timeline() {
   }, []);
 
   // move the playheads and clock without re-rendering React every frame
-  usePlayhead(project, (out, source) => {
+  usePlayhead(recording, (out, source) => {
     if (clock.current) clock.current.textContent = `${fmt(out)} / ${fmt(edited)}`;
     const st = useStore.getState();
     const v = st.zoom;
@@ -170,7 +112,7 @@ export function Timeline() {
   const srcPct = (t: number) => `${(t / duration) * 100}%`;
   const removed = duration - edited;
   const summary = [
-    removed > 0.05 ? `${removed < 60 ? `${removed.toFixed(1)} s` : fmt(removed)} removed` : '',
+    removed > 0.05 && !music ? `${removed < 60 ? `${removed.toFixed(1)} s` : fmt(removed)} removed` : '',
     moves.length ? `${moves.length} passage${moves.length === 1 ? '' : 's'} moved` : '',
   ].filter(Boolean);
 
@@ -193,7 +135,13 @@ export function Timeline() {
           </>
         ) : (
           <span className={phase === 'error' ? 'status-error' : 'muted'}>
-            {phase === 'error' ? message : summary.length ? `${summary.join(', ')}.` : 'Click the waveform to jump.'}
+            {phase === 'error'
+              ? message
+              : summary.length
+                ? `${summary.join(', ')}.`
+                : music
+                  ? 'Drag across the waveform to mark a part. Click to jump.'
+                  : 'Click the waveform to jump, or drag across it to select audio.'}
           </span>
         )}
         {!working && summary.length > 0 && (
@@ -202,7 +150,7 @@ export function Timeline() {
             title="Bring back every cut and undo every move"
             onClick={() =>
               confirm(
-                `Reset the whole timeline of ${project.name}?\n\nEvery cut comes back and every move is undone, so it plays exactly as recorded. The transcript, highlights and speaker names stay.\n\nYou can still undo this with ${combo('mod', 'Z')}.`,
+                `Reset the whole timeline of ${recording.name}?\n\nEvery cut comes back and every move is undone, so it plays exactly as recorded. The transcript, highlights and speaker names stay.\n\nYou can still undo this with ${combo('mod', 'Z')}.`,
               ) && resetTimeline()
             }
           >
@@ -232,24 +180,23 @@ export function Timeline() {
           </span>
         ))}
       </div>
-      {project.tracks.map((track, i) => (
-        <div className="lane" key={track.id}>
+      {recording.tracks.map((track, i) => (
+        <div className={`lane${music ? ' tall' : ''}`} key={track.id}>
           <div className="lane-head" style={{ borderLeftColor: trackColor(i) }}>
-            <b>{trackLabel(project, track.id, track.speakerId)}</b>
+            <b>{trackLabel(recording, track.id, track.speakerId)}</b>
             <span className="muted" title={track.fileName}>
               {track.fileName}
             </span>
           </div>
+          <div className="lane-cell">
+          {i === 0 && waveSel && <SelectionBar sel={waveSel} view={view} canDelete={!music} />}
           <div
             className="lane-body"
-            onClick={(e) => {
-              const r = e.currentTarget.getBoundingClientRect();
-              seekOutput(view.start + ((e.clientX - r.left) / r.width) * view.span);
-            }}
+            onPointerDown={(e) => selectOnWave(e, view, edited)}
           >
             <Waveform
               peaks={peaks[track.id]}
-              color={trackColor(i)}
+              color={music ? MUSIC_COLOR : trackColor(i)}
               source={duration}
               length={view.span}
               from={view.start}
@@ -269,12 +216,19 @@ export function Timeline() {
               .map((p) => (
                 <div key={p.at} className="join" style={{ left: pct(p.at) }} />
               ))}
+            {parts.map((p, k) =>
+                visible(p.outStart, p.outEnd) ? (
+                  <PartRegion key={`${p.id}-${p.outStart}`} part={p} left={pct(p.outStart)} width={len(p.outEnd - p.outStart)} row={rows[k]} view={view} />
+                ) : null,
+              )}
+            {waveSel && <div className="wave-sel" style={{ left: pct(waveSel.start), width: len(waveSel.end - waveSel.start) }} />}
             <div className="playhead" ref={(el) => void (heads.current[i] = el)} />
+          </div>
           </div>
         </div>
       ))}
       </div>
-      <Overview pieces={pieces} edited={edited} duration={duration} peaks={peaks[project.tracks[0].id]} view={zoom} />
+      <Overview pieces={pieces} edited={edited} duration={duration} peaks={peaks[recording.tracks[0].id]} view={zoom} />
       <div className="orig">
         <button className="ghost orig-toggle" onClick={() => setSettings({ showOriginal: !showOriginal })} aria-expanded={showOriginal}>
           {showOriginal ? 'Hide original ▾' : 'Show original ▸'}
@@ -288,7 +242,7 @@ export function Timeline() {
               seekSource(((e.clientX - r.left) / r.width) * duration);
             }}
           >
-            <Waveform peaks={peaks[project.tracks[0].id]} color="var(--muted)" source={duration} length={duration} />
+            <Waveform peaks={peaks[recording.tracks[0].id]} color="var(--muted)" source={duration} length={duration} />
             {cuts.map(([a, b]) => (
               <div key={a} className="cut-region" style={{ left: srcPct(a), width: srcPct(b - a) }} />
             ))}
@@ -301,7 +255,116 @@ export function Timeline() {
           </div>
         )}
       </div>
+      {!music && recording.parts.length > 0 && <PartsStrip parts={recording.parts} />}
     </section>
+  );
+}
+
+/** Output seconds under the pointer, clamped to the edit. */
+function timeAt(el: Element, clientX: number, view: ZoomView, total: number) {
+  const r = el.getBoundingClientRect();
+  return Math.max(0, Math.min(total, view.start + ((clientX - r.left) / r.width) * view.span));
+}
+
+/** Drag on a music waveform: select a range; a press without a drag jumps there instead. */
+function selectOnWave(e: React.PointerEvent, view: ZoomView, total: number) {
+  if (e.button !== 0) return;
+  const el = e.currentTarget;
+  const x0 = e.clientX;
+  const t0 = timeAt(el, x0, view, total);
+  const st = useStore.getState();
+  let dragging = false;
+  const onMove = (ev: PointerEvent) => {
+    if (!dragging && Math.abs(ev.clientX - x0) < DRAG_PX) return;
+    dragging = true;
+    const t = timeAt(el, ev.clientX, view, total);
+    st.setWaveSel({ start: Math.min(t0, t), end: Math.max(t0, t) });
+  };
+  const onUp = () => {
+    window.removeEventListener('pointermove', onMove);
+    window.removeEventListener('pointerup', onUp);
+    if (dragging) return;
+    st.setWaveSel(null);
+    st.seekOutput(t0);
+  };
+  window.addEventListener('pointermove', onMove);
+  window.addEventListener('pointerup', onUp);
+}
+
+/** The bar over a waveform selection: its range, Play, Delete (speech) and Add as part. */
+function SelectionBar({ sel, view, canDelete }: { sel: { start: number; end: number }; view: ZoomView; canDelete: boolean }) {
+  const { playRange, addPartFromSelection, deleteWaveSel, setWaveSel } = useStore.getState();
+  const ref = useRef<HTMLDivElement>(null);
+  const share = (sel.start - view.start) / view.span;
+  // start over the selection, but never past either end of the lane
+  useLayoutEffect(() => {
+    const el = ref.current;
+    const lane = el?.parentElement;
+    if (!el || !lane) return;
+    el.style.left = `${Math.max(0, Math.min(share * lane.clientWidth, lane.clientWidth - el.offsetWidth))}px`;
+  });
+  return (
+    <div className="selbar wave-bar" ref={ref} onPointerDown={(e) => e.stopPropagation()}>
+      <span className="mono range">{rangeLabel(sel.start, sel.end)}</span>
+      <button onClick={() => playRange(sel.start, sel.end)} title="Play the selection">
+        ▶ Play
+      </button>
+      {canDelete && (
+        <button onClick={deleteWaveSel} title="Cut this audio out of the edit">
+          Delete <kbd>{combo('del')}</kbd>
+        </button>
+      )}
+      <button className="add" onClick={addPartFromSelection} title="Make this a part (Enter)">
+        + Add as part <kbd>Enter</kbd>
+      </button>
+      <button onClick={() => setWaveSel(null)} title="Clear the selection (Esc)" aria-label="Clear the selection">
+        ✕
+      </button>
+    </div>
+  );
+}
+
+/** A part on the waveform: coloured span, a name that plays it, and edges to drag. */
+function PartRegion({ part, left, width, row, view }: { part: Part & { outStart: number; outEnd: number }; left: string; width: string; row: number; view: ZoomView }) {
+  const playing = useStore((s) => s.playingPart === part.id);
+  const dragEdge = (e: React.PointerEvent, edge: 'start' | 'end') => {
+    e.stopPropagation();
+    e.preventDefault();
+    const st = useStore.getState();
+    const recording = st.recording!;
+    const before = recording.parts;
+    const body = (e.currentTarget as Element).closest('.lane-body')!;
+    const total = outputDuration(recording.segments);
+    let latest = before;
+    const onMove = (ev: PointerEvent) => {
+      const out = timeAt(body, ev.clientX, view, total);
+      const src = outputToSource(recording.segments, out)?.source ?? out;
+      latest = setPartEdge(before, part.id, edge, src, recording.duration);
+      st.previewParts(latest);
+    };
+    const onUp = () => {
+      window.removeEventListener('pointermove', onMove);
+      window.removeEventListener('pointerup', onUp);
+      if (latest !== before) st.commitParts(latest, before);
+    };
+    window.addEventListener('pointermove', onMove);
+    window.addEventListener('pointerup', onUp);
+  };
+  return (
+    <div className={`part-region hl-${part.color}`} style={{ left, width }}>
+      <button
+        className={`part-label${playing ? ' on' : ''}`}
+        style={{ top: 4 + row * 19 }}
+        onPointerDown={(e) => e.stopPropagation()}
+        onClick={() => (playing ? useStore.getState().togglePlay() : useStore.getState().playPart(part.id))}
+        title={`${part.name}: ${rangeLabel(part.start, part.end)}. Click to play.`}
+      >
+        {playing ? '❚❚ ' : ''}
+        {part.name}
+      </button>
+      <span className="part-edge l" onPointerDown={(e) => dragEdge(e, 'start')} title="Drag to move the start" />
+      <span className="part-edge r" onPointerDown={(e) => dragEdge(e, 'end')} title="Drag to move the end" />
+    </div>
   );
 }
 

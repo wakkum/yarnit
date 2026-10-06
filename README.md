@@ -29,7 +29,7 @@ Prefer a terminal? In the folder, run `npm install` once, then `npm start`.
 
 ## Using it
 
-Drop in an audio file (MP3, WAV, M4A) and wait for the transcript. Press **?** in the app for the full guide and FAQ.
+Drop in audio files (MP3, WAV, M4A), say what each one is, and wait for the transcripts. Press **?** in the app for the full guide and FAQ.
 
 | Action | Windows | Mac |
 | --- | --- | --- |
@@ -40,7 +40,7 @@ Drop in an audio file (MP3, WAV, M4A) and wait for the transcript. Press **?** i
 | Undo / redo | Ctrl+Z / Ctrl+Y | ⌘Z / ⇧⌘Z |
 | Search | Ctrl+F | ⌘F |
 
-Your work is saved automatically in the browser, and Yarnit reopens your last project next time (**Projects** lists the rest). Also: shorten long pauses, remove "um"s, highlight in colours, rename speakers, light or dark theme, and export to MP3 or WAV.
+A project holds several recordings (interviews, voice-overs, music, sound effects), listed in a sidebar. For music and sound effects you mark the parts you want (intro, bed, sting) by dragging across the waveform. Your work is saved automatically in the browser, and Yarnit reopens your last project next time (**Projects** lists the rest). Also: shorten long pauses, remove "um"s, highlight in colours, rename speakers, light or dark theme, and export to MP3 or WAV.
 
 ## For developers
 

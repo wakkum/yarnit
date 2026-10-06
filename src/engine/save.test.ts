@@ -1,10 +1,22 @@
 import { describe, expect, it } from 'vitest';
-import { fromSaved, SAVE_VERSION, summarize, toSaved } from './save';
-import type { Project } from './types';
+import {
+  baseName,
+  fromSavedProject,
+  guessKind,
+  fromSavedRecording,
+  migrateV1,
+  SAVE_VERSION,
+  summarizeProject,
+  summarizeRecording,
+  toSavedProject,
+  toSavedRecording,
+} from './save';
+import type { Recording } from './types';
 
-const project: Project = {
-  id: 'p1',
+const recording: Recording = {
+  id: 'r1',
   name: 'talk.wav',
+  kind: 'interview',
   sampleRate: 44_100,
   duration: 10,
   tracks: [{ id: 't1', fileName: 'talk.wav', offset: 0, speakerId: 'sp1' }],
@@ -16,45 +28,95 @@ const project: Project = {
   ],
   highlights: [{ id: 'h1', color: 'red', start: 0.5, end: 0.9 }],
   highlightNames: { red: 'Must keep' },
+  parts: [{ id: 'pt1', name: 'Intro', color: 'blue', start: 1, end: 3 }],
 };
 
-describe('save format', () => {
-  it('round-trips through JSON unchanged', () => {
-    const back = fromSaved(JSON.parse(JSON.stringify(toSaved(project, true, 123))));
-    expect(back).toEqual({ version: SAVE_VERSION, savedAt: 123, transcribed: true, project });
+describe('recordings', () => {
+  it('round-trip through JSON unchanged', () => {
+    const back = fromSavedRecording(JSON.parse(JSON.stringify(toSavedRecording(recording, true, 123))));
+    expect(back).toEqual({ version: SAVE_VERSION, savedAt: 123, transcribed: true, recording });
   });
 
-  it('fills fields that older saves lack', () => {
-    const { highlights: _h, highlightNames: _n, speakers: _s, ...old } = project;
-    const back = fromSaved({ version: 1, savedAt: 1, project: old });
-    expect(back?.project.highlights).toEqual([]);
-    expect(back?.project.highlightNames).toEqual({});
-    expect(back?.project.speakers).toEqual([]);
+  it('fill fields that older saves lack', () => {
+    const { highlights: _h, highlightNames: _n, speakers: _s, kind: _k, parts: _p, ...old } = recording;
+    const back = fromSavedRecording({ version: 1, savedAt: 1, recording: old });
+    expect(back?.recording.highlights).toEqual([]);
+    expect(back?.recording.highlightNames).toEqual({});
+    expect(back?.recording.speakers).toEqual([]);
+    expect(back?.recording.kind).toBe('interview');
+    expect(back?.recording.parts).toEqual([]);
     expect(back?.transcribed).toBe(true);
   });
 
-  it('rejects junk and saves from a newer version', () => {
-    expect(fromSaved(null)).toBeNull();
-    expect(fromSaved({ version: 1, project: { id: 'x' } })).toBeNull();
-    expect(fromSaved({ ...toSaved(project, true, 1), version: SAVE_VERSION + 1 })).toBeNull();
+  it('reject junk and saves from a newer version', () => {
+    expect(fromSavedRecording(null)).toBeNull();
+    expect(fromSavedRecording({ version: 2, recording: { id: 'x' } })).toBeNull();
+    expect(fromSavedRecording({ ...toSavedRecording(recording, true, 1), version: SAVE_VERSION + 1 })).toBeNull();
   });
 
-  it('drops highlights with an unknown colour', () => {
-    const odd = { ...project, highlights: [...project.highlights, { id: 'h2', color: 'teal', start: 1, end: 2 }] };
-    expect(fromSaved(toSaved(odd as Project, true, 1))?.project.highlights).toEqual(project.highlights);
+  it('drop broken parts and keep the rest sorted', () => {
+    const parts = [{ id: 'b', name: 'B', color: 'red', start: 5, end: 6 }, { id: 'x', name: 'X', color: 'teal', start: 0, end: 1 }, { id: 'y', name: 'Y', color: 'red', start: 4, end: 4 }, ...recording.parts];
+    expect(fromSavedRecording(toSavedRecording({ ...recording, parts } as Recording, true, 1))?.recording.parts.map((x) => x.id)).toEqual(['pt1', 'b']);
   });
 
-  it('summarizes the edit length and counts', () => {
-    expect(summarize(toSaved(project, false, 5))).toEqual({
-      id: 'p1',
+  it('drop highlights with an unknown colour', () => {
+    const odd = { ...recording, highlights: [...recording.highlights, { id: 'h2', color: 'teal', start: 1, end: 2 }] };
+    expect(fromSavedRecording(toSavedRecording(odd as Recording, true, 1))?.recording.highlights).toEqual(recording.highlights);
+  });
+
+  it('summarize the edit length and counts', () => {
+    expect(summarizeRecording(toSavedRecording(recording, false, 5))).toEqual({
+      id: 'r1',
       name: 'talk.wav',
+      kind: 'interview',
       duration: 10,
       edited: 8,
       words: 1,
       highlights: 1,
+      parts: 1,
       transcribed: false,
       savedAt: 5,
       trackIds: ['t1'],
     });
+  });
+});
+
+describe('projects', () => {
+  const project = { id: 'p1', name: 'Episode 3', recordingIds: ['r1', 'r2'], lastRecordingId: 'r1' };
+
+  it('round-trip and default a missing name', () => {
+    expect(fromSavedProject(JSON.parse(JSON.stringify(toSavedProject(project, 7))))).toEqual({ version: SAVE_VERSION, savedAt: 7, project });
+    expect(fromSavedProject({ version: 2, project: { id: 'p2' } })?.project).toEqual({ id: 'p2', name: 'Untitled project', recordingIds: [] });
+    expect(fromSavedProject({ version: 2, project: {} })).toBeNull();
+  });
+
+  it('summarize over their own recordings only, newest save wins', () => {
+    const a = summarizeRecording(toSavedRecording(recording, true, 50));
+    const other = { ...a, id: 'zz', edited: 99 };
+    expect(summarizeProject(toSavedProject(project, 10), [a, other])).toEqual({ id: 'p1', name: 'Episode 3', recordings: 1, duration: 8, savedAt: 50 });
+  });
+});
+
+describe('migrateV1', () => {
+  it('turns an old one-file save into a project holding that recording', () => {
+    const { kind: _k, ...old } = recording;
+    const m = migrateV1({ version: 1, savedAt: 9, transcribed: false, project: old })!;
+    expect(m.recording).toEqual({ version: SAVE_VERSION, savedAt: 9, transcribed: false, recording });
+    expect(m.project).toEqual({ version: SAVE_VERSION, savedAt: 9, project: { id: 'pj-r1', name: 'talk', recordingIds: ['r1'], lastRecordingId: 'r1' } });
+  });
+
+  it('leaves anything else alone', () => {
+    expect(migrateV1({ version: 2, project: {} })).toBeNull();
+    expect(migrateV1('x')).toBeNull();
+  });
+
+  it('guesses short files are sound effects', () => {
+    expect(guessKind(2)).toBe('sfx');
+    expect(guessKind(600)).toBe('interview');
+    expect(guessKind(0)).toBe('interview'); // unknown length
+  });
+  it('names from file names', () => {
+    expect(baseName('Interview with Omar.m4a')).toBe('Interview with Omar');
+    expect(baseName('.wav')).toBe('.wav');
   });
 });

@@ -12,12 +12,13 @@ export function EmptyState() {
   const settings = useStore((s) => s.settings);
   const phase = useStore((s) => s.phase);
   const message = useStore((s) => s.message);
-  const { loadFile, setSettings } = useStore.getState();
+  const project = useStore((s) => s.project);
+  const { addFiles, setSettings } = useStore.getState();
   const input = useRef<HTMLInputElement>(null);
   const [over, setOver] = useState(false);
   const model = MODELS.find((m) => m.id === settings.model);
 
-  // decoding a new file or reopening a saved project: no drop zone to click meanwhile
+  // decoding a new file or reopening a saved recording: no drop zone to click meanwhile
   if (phase === 'decoding')
     return (
       <div className="empty">
@@ -37,24 +38,29 @@ export function EmptyState() {
         onDrop={(e) => {
           e.preventDefault();
           setOver(false);
-          const f = e.dataTransfer.files[0];
-          if (f) void loadFile(f);
+          e.stopPropagation();
+          void addFiles([...e.dataTransfer.files]);
         }}
       >
-        <h1>Drop an audio file to start</h1>
+        <h1>{project ? `Add recordings to ${project.name}` : 'Drop audio files to start'}</h1>
         <p>
-          MP3, WAV or M4A. It is transcribed and edited on this computer: nothing is uploaded. The first time, the
+          Interviews, voice-overs, music or sound effects: MP3, WAV or M4A, one or several at once. Everything stays on this computer: nothing is uploaded. The first time, the
           speech model ({model?.size}) downloads once and is then kept by your browser.
         </p>
         <button className="primary" onClick={() => input.current?.click()}>
-          Choose audio file
+          Choose audio files
         </button>
         <input
           ref={input}
           type="file"
           accept="audio/*"
+          multiple
           hidden
-          onChange={(e) => e.target.files?.[0] && loadFile(e.target.files[0])}
+          onChange={(e) => {
+            const files = [...(e.target.files ?? [])];
+            e.target.value = '';
+            void addFiles(files);
+          }}
         />
         {phase === 'error' && <p className="status-error" style={{ marginTop: 16 }}>{message}</p>}
         <div className="settings">

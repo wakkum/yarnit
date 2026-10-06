@@ -9,6 +9,7 @@ import {
   moveWords,
   outputDuration,
   outputToSource,
+  removeOutputRange,
   removeSpan,
   shortenPauses,
   sourceToOutput,
@@ -211,5 +212,21 @@ describe('pauses', () => {
     expect(close(out)).toEqual([[0, 1.2], [2.8, 5.2]]);
     expect(outputDuration(out)).toBeCloseTo(8 - 1.6 - 2.8);
     expect(found(out)).toEqual([]);
+  });
+});
+
+describe('removeOutputRange', () => {
+  const seg = (id: string, start: number, end: number) => ({ id, start, end });
+  it('cuts inside one segment', () => {
+    expect(removeOutputRange([seg('a', 0, 10)], 2, 3).map((s) => [s.start, s.end])).toEqual([[0, 2], [3, 10]]);
+  });
+  it('cuts across a seam of reordered segments', () => {
+    // plays 20..25 then 0..5; output 3..7 is source 23..25 and 0..2
+    const out = removeOutputRange([seg('a', 20, 25), seg('b', 0, 5)], 3, 7);
+    expect(out.map((s) => [s.start, s.end])).toEqual([[20, 23], [2, 5]]);
+  });
+  it('leaves the edit alone outside it', () => {
+    const segs = [seg('a', 0, 5)];
+    expect(removeOutputRange(segs, 6, 8)).toEqual(segs);
   });
 });

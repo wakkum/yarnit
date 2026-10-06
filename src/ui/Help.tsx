@@ -5,7 +5,7 @@ import { useStore } from '../state/store';
 import { combo, isMac } from './keys';
 
 const STEPS: [string, ReactNode][] = [
-  ['Open a file', <>Drop an MP3, WAV or M4A onto the page, or click <b>Choose audio file</b>.</>],
+  ['Add recordings', <>Drop MP3, WAV or M4A files onto the page or the sidebar, or click <b>+ Add recordings</b>. Say what each one is: interviews and voice-overs get a transcript, music and sound effects don't.</>],
   ['Wait for the transcript', 'It is made on this computer. The first time, the speech model downloads once.'],
   ['Edit the text', <>Select words and press <kbd>Delete</kbd>. They are cut from the audio too.</>],
   ['Export', <>Play it back to check, then <b>Export</b> as MP3 or WAV.</>],
@@ -18,6 +18,7 @@ const KEYS: [string, ReactNode][] = [
   ['Zoom the waveform', <><kbd>+</kbd> / <kbd>−</kbd>, the buttons by the play button, or <kbd>{combo('mod')}</kbd> + scroll (trackpad: pinch). Scroll sideways to move along. The strip under the waveform shows the whole edit: drag its blue window, or its edges, and double-click it to fit</>],
   ['Select a range', <>Drag across the words, or <kbd>Shift</kbd> + click</>],
   ['Cut the selection', <><kbd>Delete</kbd> or <kbd>Backspace</kbd></>],
+  ['Select audio on the waveform', <>Drag across it. The words under it light up; <kbd>Delete</kbd> cuts it (interviews and voice-overs), <kbd>Enter</kbd> makes it a part</>],
   ['Undo / redo', <><kbd>{combo('mod', 'Z')}</kbd> / <kbd>{combo('shift', 'mod', 'Z')}</kbd>{!isMac && <> or <kbd>{combo('mod', 'Y')}</kbd></>}</>],
   ['Move a passage', <>Select it, <b>Cut</b> (<kbd>{combo('mod', 'X')}</kbd>), click a word next to where it goes, then <b>Paste before</b> (<kbd>{combo('mod', 'V')}</kbd>) or <b>Paste after</b> (<kbd>{combo('shift', 'mod', 'V')}</kbd>)</>],
   ['Move a whole paragraph', <>Click ↑ or ↓ under its speaker name, or click a word in it and press <kbd>{combo('alt', 'shift', '↑')}</kbd> / <kbd>{combo('alt', 'shift', '↓')}</kbd>. <b>Outline</b> (above the transcript) shows one line per paragraph: drag ⋮⋮ to reorder, <kbd>↑</kbd> <kbd>↓</kbd> to pick a row</>],
@@ -41,8 +42,9 @@ const FAQ: [string, string][] = [
   ['Which speech model should I pick?', 'Balanced suits most English recordings. Most accurate is slower but better with accents and noise. Use Multilingual for other languages.'],
   ['MP3 or WAV?', 'MP3 (192 kbps) is small and good for sharing. WAV is full quality, best if you will edit it further elsewhere.'],
   ['How do I start over on a file?', 'Reset timeline (next to the play button, shown once you have edited) brings back every cut and undoes every move, after asking first. The transcript, highlights and speaker names stay, and Undo can take the reset back.'],
-  ['Is my work saved?', 'Yes, automatically after every change, in this browser on this computer. Next time, Yarnit reopens the project you last worked on. Projects in the top bar lists the others. Undo history starts fresh when you reopen. Clearing your browser data removes saved projects, so export anything you want to keep.'],
-  ['Can I add a second file or track?', 'Not yet. Dropping a new file starts a new project; the current one stays saved under Projects. Multitrack is planned.'],
+  ['Is my work saved?', 'Yes, automatically after every change, in this browser on this computer. Next time, Yarnit reopens the project and recording you last worked on. Projects (top bar, or ▾ next to the project name) lists the others. Undo history starts fresh when you switch or reopen. Clearing your browser data removes saved projects, so export anything you want to keep.'],
+  ['How do projects and recordings work?', 'A project holds several recordings: interviews, voice-overs, music, sound effects. Each recording has its own transcript and edit; click one in the sidebar to work on it. Transcription runs in the background, one recording at a time, so you can edit one while the next is transcribed. Use ⋯ on a recording to rename it, change what it is, or delete it, and ☰ to fold the sidebar. Next step: a main timeline where you combine them into the final version.'],
+  ['What are parts?', 'Pieces of a recording you want to use, each with a name and colour, for example Intro, Bed or Sting from a music file, or the best quote from an interview. Drag across the waveform, then click Add as part (or press Enter). Drag a part\'s edges on the waveform to adjust it, and click its name to rename it. Music and sound effects show their parts as pads instead of a transcript and are never cut; in an interview, parts sit in a strip under the waveform and are marked in the transcript with a coloured bar and a name tag. Parts may overlap, and each one will go to the main timeline on its own, as often as you like.'],
   ['Can I switch between light and dark?', 'Yes, with Auto / Light / Dark at the top right. Auto follows your computer. Your choice is remembered in this browser.'],
   ['Which browser should I use?', 'Chrome or Edge. Other browsers may work but are untested.'],
 ];

@@ -24,6 +24,7 @@ export class Player {
   private pausedAt = 0;
   private nextIndex = 0; // next segment to schedule
   private nextOut = 0; // output time where that segment starts
+  private until = Infinity; // output time to stop at (playing one part), else the end
   playing = false;
   onEnded?: () => void;
 
@@ -53,12 +54,14 @@ export class Player {
     return this.playing ? this.startOut + (this.ctx.currentTime - this.startCtx) : this.pausedAt;
   }
 
-  async play(from = this.pausedAt) {
+  /** Play from `from`; with `until`, stop there (fading out, as at a cut) instead of at the end. */
+  async play(from = this.pausedAt, until = Infinity) {
     await this.ctx.resume();
     this.stopNodes();
     const pos = outputToSource(this.segments, from);
     if (!pos) return;
     this.playing = true;
+    this.until = until;
     this.startCtx = this.ctx.currentTime + 0.05;
     this.startOut = from;
     this.nextIndex = pos.index;
@@ -80,21 +83,25 @@ export class Player {
 
   private schedule() {
     const horizon = this.currentTime + LOOKAHEAD;
-    while (this.nextIndex < this.segments.length && this.nextOut < horizon) {
+    while (this.nextIndex < this.segments.length && this.nextOut < horizon && this.nextOut < this.until) {
       const seg = this.segments[this.nextIndex];
       this.scheduleSegment(seg, this.nextOut, this.nextIndex);
       this.nextOut += seg.end - seg.start;
       this.nextIndex++;
     }
-    if (this.nextIndex >= this.segments.length && this.currentTime >= this.duration) {
-      this.pausedAt = 0;
+    const end = Math.min(this.duration, this.until);
+    if ((this.nextIndex >= this.segments.length || this.nextOut >= this.until) && this.currentTime >= end) {
+      this.pausedAt = end < this.duration ? end : 0;
       this.stopNodes();
       this.onEnded?.();
     }
   }
 
   private scheduleSegment(seg: Segment, segOut: number, index: number) {
-    const len = seg.end - seg.start;
+    const full = seg.end - seg.start;
+    // a range that ends inside this segment stops (and fades) there
+    const len = Math.min(full, this.until - segOut);
+    const clipped = len < full;
     // skip the part of the first segment before the playhead
     const skip = Math.max(0, this.startOut - segOut);
     const when = this.startCtx + (segOut + skip - this.startOut);
@@ -120,7 +127,7 @@ export class Player {
       gain.gain.value = level;
       const segStartAt = this.startCtx + (segOut - this.startOut);
       if (!isFirst && skip < fade) gain.gain.setValueCurveAtTime(fadeIn.map((v) => v * level), segStartAt, fade);
-      if (!isLast) gain.gain.setValueCurveAtTime(fadeOut.map((v) => v * level), segStartAt + len - fade, fade);
+      if (!isLast || clipped) gain.gain.setValueCurveAtTime(fadeOut.map((v) => v * level), segStartAt + len - fade, fade);
       src.connect(gain).connect(this.ctx.destination);
       src.start(Math.max(at, this.ctx.currentTime), bufOffset, dur);
       this.nodes.push(src);

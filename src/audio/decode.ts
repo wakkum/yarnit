@@ -20,3 +20,19 @@ export async function toWhisperMono(buffer: AudioBuffer): Promise<Float32Array> 
 
 export const channelsOf = (buffer: AudioBuffer) =>
   Array.from({ length: buffer.numberOfChannels }, (_, c) => buffer.getChannelData(c));
+
+/** A file's length in seconds from its metadata, without decoding it (0 if the browser can't tell). */
+export function probeDuration(file: Blob): Promise<number> {
+  return new Promise((resolve) => {
+    const url = URL.createObjectURL(file);
+    const audio = new Audio();
+    const finish = (d: number) => {
+      URL.revokeObjectURL(url);
+      resolve(Number.isFinite(d) ? d : 0);
+    };
+    audio.preload = 'metadata';
+    audio.onloadedmetadata = () => finish(audio.duration);
+    audio.onerror = () => finish(0);
+    audio.src = url;
+  });
+}

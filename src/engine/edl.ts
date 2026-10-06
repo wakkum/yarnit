@@ -42,6 +42,28 @@ export function removeSpan(segments: Segment[], start: number, end: number): Seg
   return normalize(out);
 }
 
+/**
+ * Remove output (edited) seconds a..b, as selected on the edited waveform. The range can cross seams,
+ * so each segment loses the slice of it that plays inside the range.
+ */
+export function removeOutputRange(segments: Segment[], a: number, b: number): Segment[] {
+  const out: Segment[] = [];
+  let acc = 0;
+  for (const s of segments) {
+    const len = s.end - s.start;
+    const from = Math.max(0, a - acc);
+    const to = Math.min(len, b - acc);
+    acc += len;
+    if (to <= from) {
+      out.push(s);
+      continue;
+    }
+    if (from > 0) out.push({ id: s.id, start: s.start, end: s.start + from });
+    if (to < len) out.push({ id: from > 0 ? newId() : s.id, start: s.start + to, end: s.end });
+  }
+  return normalize(out);
+}
+
 /** Words sorted by source start time (source order). */
 export const sourceOrder = (words: Word[]) => [...words].sort((a, b) => a.start - b.start);
 

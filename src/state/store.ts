@@ -1,7 +1,7 @@
 // App state (Zustand). Heavy audio objects live outside the store in `media`
 // so React never diffs or clones them.
 import { create } from 'zustand';
-import { channelsOf, decodeFile, toWhisperMono, WHISPER_SAMPLE_RATE } from '../audio/decode';
+import { channelsOf, decodeFile, probeDuration, toWhisperMono, WHISPER_SAMPLE_RATE } from '../audio/decode';
 import { Player } from '../audio/player';
 import {
   deleteWords,
@@ -12,6 +12,8 @@ import {
   moveWords as moveInEdit,
   newId,
   outputDuration,
+  outputToSource,
+  removeOutputRange,
   PARAGRAPH_PAD,
   shortenPauses as shortenInEdit,
   sourceToOutput,
@@ -19,16 +21,29 @@ import {
 } from '../engine/edl';
 import { renderEdit, silenceThreshold, snapToQuiet, speechEnd } from '../engine/render';
 import { highlightWords } from '../engine/highlights';
-import { toSaved, type ProjectSummary } from '../engine/save';
-import type { HighlightColor, Project, Segment, Speaker, Word } from '../engine/types';
-import { clampView, computePeaks, paragraphMove, paragraphs, searchHits, zoomAround, type Paragraph, type ZoomView } from '../engine/view';
+import { addPart, removePart, renamePart } from '../engine/parts';
+import {
+  baseName,
+  guessKind,
+  summarizeRecording,
+  toSavedProject,
+  toSavedRecording,
+  type ProjectSummary,
+  type RecordingSummary,
+  type SavedRecording,
+} from '../engine/save';
+import { isSpeech, type HighlightColor, type Part, type Project, type Recording, type RecordingKind, type Segment, type Speaker, type Word } from '../engine/types';
+import { clampView, computePeaks, editedPieces, toOutputSpans, paragraphMove, paragraphs, searchHits, zoomAround, type Paragraph, type ZoomView } from '../engine/view';
 import type { ExportMessage, ExportRequest } from '../workers/export.worker';
 import type { TranscribeMessage, TranscribeRequest } from '../workers/transcribe.worker';
 import { ago } from '../ui/time';
 import * as library from './library';
 
-/** 'off': this project is not being saved (storage blocked or full); see `message`. */
+/** 'off': this recording is not being saved (storage blocked or full); see `message`. */
 export type SaveStatus = 'off' | 'saving' | 'saved' | 'error';
+
+/** A file dropped or chosen, waiting for the "What is this recording?" answer. */
+export type PendingFile = { file: File; duration: number; kind: RecordingKind };
 
 export type Phase = 'empty' | 'decoding' | 'downloading' | 'transcribing' | 'ready' | 'exporting' | 'error';
 
@@ -44,6 +59,8 @@ export type Settings = {
   pauseKeep: number;
   /** Show the strip of the original recording under the edited waveform. */
   showOriginal: boolean;
+  /** The project sidebar: full list, or folded to a rail of icons. */
+  sidebar: 'open' | 'rail';
 };
 
 const DEFAULT_SETTINGS: Settings = {
@@ -54,6 +71,7 @@ const DEFAULT_SETTINGS: Settings = {
   pauseMin: 1,
   pauseKeep: 0.4,
   showOriginal: false,
+  sidebar: 'open',
 };
 const SETTINGS_KEY = 'yarnit.settings';
 
@@ -74,8 +92,8 @@ function saveSettings(s: Settings) {
 }
 
 /** One undo step. Words are included because speaker changes relabel them. */
-type Snapshot = Pick<Project, 'segments' | 'words' | 'speakers' | 'highlights'>;
-const snapshot = (p: Project): Snapshot => ({ segments: p.segments, words: p.words, speakers: p.speakers, highlights: p.highlights });
+type Snapshot = Pick<Recording, 'segments' | 'words' | 'speakers' | 'highlights' | 'parts'>;
+const snapshot = (p: Recording): Snapshot => ({ segments: p.segments, words: p.words, speakers: p.speakers, highlights: p.highlights, parts: p.parts });
 
 /** The right-hand side panel: at most one at a time. */
 export type Panel = 'help' | 'highlights' | 'projects' | null;
@@ -93,7 +111,18 @@ export const media = {
 };
 
 type State = {
+  /** The open project (null on the start screen). */
   project: Project | null;
+  /** Its recordings, in sidebar order. */
+  recordings: RecordingSummary[];
+  /** The open recording. */
+  recording: Recording | null;
+  /** Background transcription: which recording, and how far. */
+  transcribing: { id: string; stage: 'download' | 'transcribing'; progress: number } | null;
+  /** Recordings waiting their turn to be transcribed. */
+  queued: string[];
+  /** Files waiting for the "What is this recording?" answer. */
+  pendingFiles: PendingFile[] | null;
   phase: Phase;
   progress: number;
   message: string;
@@ -109,11 +138,11 @@ type State = {
   query: string;
   hitIndex: number;
   panel: Panel;
-  /** False while the current project is still being transcribed. */
+  /** False while the current recording is still being transcribed. */
   transcribed: boolean;
   saveStatus: SaveStatus;
   savedAt: number;
-  /** Saved projects, newest first (the start screen's recent list). */
+  /** Saved projects, newest first (the Projects drawer). */
   library: ProjectSummary[];
   /** How the transcript is shown: full text, or one line per paragraph to reorder. */
   view: 'transcript' | 'outline';
@@ -121,10 +150,30 @@ type State = {
   zoom: ZoomView | null;
   /** Key of the paragraph that just moved, so it can glow where it landed. */
   moved: string | null;
-  /** A short message shown for a few seconds (for example after reopening a project). */
+  /** A short message shown for a few seconds (for example after reopening a recording). */
   notice: string;
+  /** Music and sound effects: the range dragged on the waveform, in output seconds. */
+  waveSel: { start: number; end: number } | null;
+  /** The part playing on its own (its pad shows pause). */
+  playingPart: string | null;
+  /** The part just added, so its pad opens with the name ready to type. */
+  freshPart: string | null;
+  /** The part whose name is being edited (from a click on it or ⋯ Rename). */
+  renamingPart: string | null;
 
-  loadFile: (file: File) => Promise<void>;
+  /** Ask what each file is (opens the add dialog); `confirmAdd` then adds them to the project. */
+  addFiles: (files: File[]) => Promise<void>;
+  confirmAdd: (items: PendingFile[]) => Promise<void>;
+  cancelAdd: () => void;
+  newProject: () => Promise<void>;
+  openProject: (id: string) => Promise<void>;
+  renameProject: (name: string) => void;
+  deleteProject: (id: string) => Promise<void>;
+  openRecording: (id: string) => Promise<void>;
+  renameRecording: (id: string, name: string) => Promise<void>;
+  /** Change what a recording is; speech kinds get transcribed if they have no transcript yet. */
+  setKind: (id: string, kind: RecordingKind) => Promise<void>;
+  deleteRecording: (id: string) => Promise<void>;
   setSettings: (s: Partial<Settings>) => void;
   select: (ids: string[]) => void;
   applyEdit: (segments: Segment[]) => void;
@@ -172,30 +221,40 @@ type State = {
   /** On page load: reopen the most recently saved project, if there is one. */
   resumeLast: () => Promise<void>;
   setNotice: (notice: string) => void;
-  /** Reopen a saved project; one saved mid-transcription is transcribed again. */
-  openSaved: (id: string) => Promise<void>;
-  deleteSaved: (summary: ProjectSummary) => Promise<void>;
-  /** Save, then go back to the start screen. */
-  closeProject: () => Promise<void>;
+  setWaveSel: (sel: { start: number; end: number } | null) => void;
+  /** Play output seconds start..end, then stop; `partId` marks which pad is playing. */
+  playRange: (start: number, end: number, partId?: string) => void;
+  playPart: (id: string) => void;
+  /** Make a part of the waveform selection. */
+  addPartFromSelection: () => void;
+  /** Cut the waveform selection out of the edit (speech recordings). */
+  deleteWaveSel: () => void;
+  /** Show parts while an edge is dragged, without an undo step each frame. */
+  previewParts: (parts: Part[]) => void;
+  /** Finish a drag: one undo step back to `before`. */
+  commitParts: (parts: Part[], before: Part[]) => void;
+  renamePart: (id: string, name: string) => void;
+  setRenamingPart: (id: string | null) => void;
+  deletePart: (id: string) => void;
 };
 
-/** Apply an undoable change to the project and keep the player in sync. */
-function commit(set: (p: Partial<State>) => void, get: () => State, change: Partial<Snapshot>) {
-  const { project, past } = get();
-  if (!project) return;
+/** Apply an undoable change to the recording and keep the player in sync. */
+function commit(set: (p: Partial<State>) => void, get: () => State, change: Partial<Snapshot>, before?: Partial<Snapshot>) {
+  const { recording, past } = get();
+  if (!recording) return;
   if (change.segments) media.player?.setSegments(change.segments);
-  set({ project: { ...project, ...change }, past: [...past, snapshot(project)].slice(-HISTORY_LIMIT), future: [] });
+  set({ recording: { ...recording, ...change }, past: [...past, { ...snapshot(recording), ...before }].slice(-HISTORY_LIMIT), future: [] });
 }
 
 // Transcript and outline compute the same paragraphs from the same arrays; cache the last result.
 let parasCache: { words: Word[]; segments: Segment[]; paras: Paragraph[] } | null = null;
-export function currentParagraphs(project: Project): Paragraph[] {
-  if (parasCache?.words !== project.words || parasCache.segments !== project.segments)
-    parasCache = { words: project.words, segments: project.segments, paras: paragraphs(displayWords(project.words, project.segments)) };
+export function currentParagraphs(recording: Recording): Paragraph[] {
+  if (parasCache?.words !== recording.words || parasCache.segments !== recording.segments)
+    parasCache = { words: recording.words, segments: recording.segments, paras: paragraphs(displayWords(recording.words, recording.segments)) };
   return parasCache.paras;
 }
 
-/** Decode-side setup shared by a new file and a reopened project. */
+/** Decode-side setup shared by a new file and a reopened recording. */
 async function attachAudio(buffer: AudioBuffer, trackId: string, set: (p: Partial<State>) => void) {
   media.buffers = new Map([[trackId, buffer]]);
   media.mono16k = await toWhisperMono(buffer);
@@ -204,17 +263,15 @@ async function attachAudio(buffer: AudioBuffer, trackId: string, set: (p: Partia
   media.player!.setTracks([{ buffer, offset: 0 }]);
 }
 
-/** Stop whatever the previous project was doing (playback, a transcription still running). */
+/** Stop the previous recording's playback. (Transcription carries on in the background.) */
 function resetSession(set: (p: Partial<State>) => void) {
-  worker?.terminate();
-  worker = null;
   media.player?.pause();
   media.player ??= new Player();
-  media.player.onEnded = () => set({ playing: false });
+  media.player.onEnded = () => set({ playing: false, playingPart: null });
   return media.player;
 }
 
-/** Everything that belongs to one open project, cleared when another opens. */
+/** Everything that belongs to one open recording, cleared when another opens. */
 const FRESH = {
   selection: [],
   moved: null,
@@ -226,6 +283,10 @@ const FRESH = {
   query: '',
   hitIndex: -1,
   playing: false,
+  waveSel: null,
+  playingPart: null,
+  freshPart: null,
+  renamingPart: null,
 } satisfies Partial<State>;
 
 const snap = (t: number, lo: number, hi: number) =>
@@ -233,6 +294,11 @@ const snap = (t: number, lo: number, hi: number) =>
 
 export const useStore = create<State>((set, get) => ({
   project: null,
+  recordings: [],
+  recording: null,
+  transcribing: null,
+  queued: [],
+  pendingFiles: null,
   phase: 'empty',
   progress: 0,
   message: '',
@@ -254,46 +320,202 @@ export const useStore = create<State>((set, get) => ({
   view: 'transcript',
   zoom: null,
   moved: null,
+  waveSel: null,
+  playingPart: null,
+  freshPart: null,
+  renamingPart: null,
 
-  async loadFile(file) {
+  async addFiles(files) {
+    const audio = files.filter((f) => f.type.startsWith('audio/') || /\.(mp3|wav|m4a|aac|ogg|oga|flac|webm|opus)$/i.test(f.name));
+    if (!audio.length) {
+      if (files.length) set({ notice: 'Those are not audio files. Yarnit opens MP3, WAV, M4A and similar.' });
+      return;
+    }
+    const pendingFiles = await Promise.all(
+      audio.map(async (file) => {
+        const duration = await probeDuration(file);
+        return { file, duration, kind: guessKind(duration) };
+      }),
+    );
+    set({ pendingFiles });
+  },
+
+  cancelAdd: () => set({ pendingFiles: null }),
+
+  async confirmAdd(items) {
+    set({ pendingFiles: null });
+    if (!items.length) return;
+    if (!get().project) await createProject(set, get, baseName(items[0].file.name));
+    const added: string[] = [];
+    for (const [i, { file, kind }] of items.entries()) {
+      set({ notice: `Adding ${file.name}${items.length > 1 ? ` (${i + 1} of ${items.length})` : ''}` });
+      try {
+        const buffer = await decodeBlob(file);
+        const trackId = newId('t');
+        const speaker: Speaker = { id: newId('sp'), name: 'Speaker 1' };
+        const recording: Recording = {
+          id: newId('r'),
+          name: baseName(file.name),
+          kind,
+          sampleRate: buffer.sampleRate,
+          duration: buffer.duration,
+          tracks: [{ id: trackId, fileName: file.name, offset: 0, speakerId: speaker.id }],
+          speakers: [speaker],
+          words: [],
+          segments: fullSegments(buffer.duration),
+          highlights: [],
+          highlightNames: {},
+          parts: [],
+        };
+        // the original file is kept so the recording can be reopened
+        await library.saveAudio(trackId, file);
+        const saved = toSavedRecording(recording, !isSpeech(kind), Date.now());
+        await library.saveRecording(saved);
+        const project = get().project!;
+        persistProject(set, { ...project, recordingIds: [...project.recordingIds, recording.id] });
+        set({ recordings: [...get().recordings, summarizeRecording(saved)] });
+        if (isSpeech(kind)) enqueue(recording.id);
+        added.push(recording.id);
+      } catch (err) {
+        const blocked = (err as Error).name === 'QuotaExceededError' || /storage|quota|IndexedDB/i.test(String(err));
+        set({
+          notice: blocked
+            ? `Could not add ${file.name}: this browser is not letting Yarnit save (private window or full disk).`
+            : `Could not add ${file.name}: ${(err as Error).message}`,
+        });
+      }
+    }
+    if (!added.length) return;
+    library.requestPersistence();
+    await get().openRecording(added[0]);
+    set({ notice: added.length > 1 ? `Added ${added.length} recordings` : '' });
+  },
+
+  async newProject() {
+    await flushSave();
+    resetSession(set);
+    for (const id of [...get().queued]) dequeue(id);
+    set({ ...FRESH, recording: null, saveStatus: 'off', phase: 'empty', progress: 0, message: '' });
+    await createProject(set, get, 'Untitled project');
+    await get().refreshLibrary();
+  },
+
+  async openProject(id) {
+    await flushSave();
+    resetSession(set);
+    set({ ...FRESH, recording: null, saveStatus: 'off', phase: 'decoding', progress: 0, message: 'Opening project' });
+    try {
+      const saved = await library.loadProject(id);
+      if (!saved) throw new Error('it was saved by a newer version of Yarnit, or is damaged');
+      const { project } = saved;
+      const recordings = await library.recordingSummaries(project.recordingIds);
+      // only this project's recordings get transcribed in the background
+      for (const q of [...get().queued]) if (!project.recordingIds.includes(q)) dequeue(q);
+      if (running && !project.recordingIds.includes(running.id)) dequeue(running.id);
+      set({ project, recordings });
+      for (const r of recordings) if (isSpeech(r.kind) && !r.transcribed) enqueue(r.id);
+      const target = recordings.find((r) => r.id === project.lastRecordingId) ?? recordings[0];
+      if (target) await get().openRecording(target.id);
+      else set({ phase: 'empty', message: '' });
+    } catch (err) {
+      set({ phase: 'error', message: `Could not open the project: ${(err as Error).message}` });
+    }
+  },
+
+  renameProject(name) {
+    const { project } = get();
+    const clean = name.trim();
+    if (project && clean && clean !== project.name) persistProject(set, { ...project, name: clean });
+  },
+
+  async deleteProject(id) {
+    try {
+      if (get().project?.id === id) {
+        await flushSave();
+        resetSession(set);
+        for (const r of get().recordings) dequeue(r.id);
+        set({ ...FRESH, project: null, recordings: [], recording: null, saveStatus: 'off', phase: 'empty', progress: 0, message: '' });
+      }
+      await library.deleteProject(id);
+    } catch {
+      // the list below shows what is still there
+    }
+    await get().refreshLibrary();
+  },
+
+  async openRecording(id) {
     await flushSave();
     const player = resetSession(set);
-    set({ ...FRESH, project: null, saveStatus: 'off', phase: 'decoding', progress: 0, message: `Decoding ${file.name}` });
+    opening = id;
+    const name = get().recordings.find((r) => r.id === id)?.name ?? 'recording';
+    set({ ...FRESH, recording: null, saveStatus: 'off', phase: 'decoding', progress: 0, message: `Opening ${name}` });
     try {
+      const saved = await library.loadRecording(id);
+      if (!saved) throw new Error('it was saved by a newer version of Yarnit, or is damaged');
+      let { recording } = saved;
+      const track = recording.tracks[0];
+      const file = await library.loadAudio(track.id);
+      if (!file) throw new Error('its audio is missing from browser storage');
       const buffer = await decodeFile(player.ctx, file);
-      const trackId = newId('t');
-      const speaker: Speaker = { id: newId('sp'), name: 'Speaker 1' };
-      await attachAudio(buffer, trackId, set);
-      // the original file is kept so the project can be reopened; without it there is nothing to save
-      const stored = await library.saveAudio(trackId, file).then(
-        () => true,
-        () => false,
-      );
-      if (stored) library.requestPersistence();
-      const project: Project = {
-        id: newId('p'),
-        name: file.name,
-        sampleRate: buffer.sampleRate,
-        duration: buffer.duration,
-        tracks: [{ id: trackId, fileName: file.name, offset: 0, speakerId: speaker.id }],
-        speakers: [speaker],
-        words: [],
-        segments: fullSegments(buffer.duration),
-        highlights: [],
-        highlightNames: {},
-      };
-      player.setSegments(project.segments);
-      set({
-        project,
-        transcribed: false,
-        saveStatus: stored ? 'saving' : 'off',
-        phase: 'downloading',
-        message: stored ? 'Loading speech model' : 'Loading speech model. This browser is not letting Yarnit save, so edits are lost when you close the tab.',
-      });
-      transcribe(trackId, set, get);
+      if (opening !== id) return; // another recording was clicked meanwhile
+      await attachAudio(buffer, track.id, set);
+      player.setSegments(recording.segments);
+      if (running?.id === id) recording = { ...recording, words: running.words };
+      else if (!saved.transcribed && isSpeech(recording.kind)) {
+        // unfinished transcript: it starts over (edits made meanwhile only touched segments, which stay)
+        recording = { ...recording, words: [] };
+        enqueue(id);
+      }
+      const t = get().transcribing;
+      const phase = t?.id === id ? (t.stage === 'download' ? 'downloading' : 'transcribing') : 'ready';
+      set({ recording, transcribed: saved.transcribed, saveStatus: 'saving', phase, message: phase === 'ready' ? '' : 'Transcribing' });
+      const project = get().project;
+      if (project && project.lastRecordingId !== id) persistProject(set, { ...project, lastRecordingId: id });
     } catch (err) {
-      set({ phase: 'error', message: `Could not open file: ${(err as Error).message}` });
+      set({ phase: 'error', message: `Could not open ${name}: ${(err as Error).message}` });
     }
+  },
+
+  async renameRecording(id, name) {
+    const clean = name.trim();
+    if (clean) await updateRecording(set, get, id, (r) => ({ ...r, name: clean }));
+  },
+
+  async setKind(id, kind) {
+    await updateRecording(set, get, id, (r) => ({ ...r, kind }), (saved) => {
+      if (!isSpeech(kind)) {
+        dequeue(id);
+        return true; // nothing to transcribe
+      }
+      if (saved.transcribed && saved.recording.words.length) return true;
+      enqueue(id);
+      return false;
+    });
+  },
+
+  async deleteRecording(id) {
+    const { project, recordings, recording } = get();
+    const summary = recordings.find((r) => r.id === id);
+    if (!project || !summary) return;
+    dequeue(id);
+    const index = recordings.indexOf(summary);
+    const rest = recordings.filter((r) => r.id !== id);
+    if (recording?.id === id) {
+      clearTimeout(pendingSave);
+      pendingSave = undefined;
+      resetSession(set);
+      set({ ...FRESH, recording: null, saveStatus: 'off', phase: 'empty', progress: 0, message: '' });
+    }
+    try {
+      await library.deleteRecording(summary);
+    } catch {
+      // still drop it from the project below
+    }
+    const { lastRecordingId, ...kept } = project;
+    persistProject(set, { ...kept, recordingIds: project.recordingIds.filter((r) => r !== id), ...(lastRecordingId !== id ? { lastRecordingId } : {}) });
+    set({ recordings: rest });
+    const next = rest[Math.min(index, rest.length - 1)];
+    if (recording?.id === id && next) await get().openRecording(next.id);
   },
 
   setSettings(s) {
@@ -301,55 +523,55 @@ export const useStore = create<State>((set, get) => ({
     saveSettings(settings);
     set({ settings });
   },
-  select: (ids) => set({ selection: ids }),
+  select: (ids) => set(ids.length ? { selection: ids, waveSel: null } : { selection: ids }),
 
   applyEdit(segments) {
-    const { project } = get();
-    if (project) commit(set, get, { segments });
+    const { recording } = get();
+    if (recording) commit(set, get, { segments });
   },
 
   deleteSelection() {
-    const { project, selection } = get();
-    if (!project || !selection.length) return;
-    get().applyEdit(deleteWords(project.segments, project.words, selection, snap));
+    const { recording, selection } = get();
+    if (!recording || !selection.length) return;
+    get().applyEdit(deleteWords(recording.segments, recording.words, selection, snap));
     set({ selection: [] });
   },
 
   moveWords(ids, targetId, side) {
-    const { project } = get();
-    if (!project || !ids.length) return;
-    get().applyEdit(moveInEdit(project.segments, project.words, ids, targetId, side));
+    const { recording } = get();
+    if (!recording || !ids.length) return;
+    get().applyEdit(moveInEdit(recording.segments, recording.words, ids, targetId, side));
   },
 
   removeFillers() {
-    const { project } = get();
-    if (!project) return;
-    const kept = new Set(displayWords(project.words, project.segments).filter((d) => !d.deleted).map((d) => d.word.id));
-    const ids = project.words.filter((w) => w.isFiller && kept.has(w.id)).map((w) => w.id);
-    if (ids.length) get().applyEdit(deleteWords(project.segments, project.words, ids, snap));
+    const { recording } = get();
+    if (!recording) return;
+    const kept = new Set(displayWords(recording.words, recording.segments).filter((d) => !d.deleted).map((d) => d.word.id));
+    const ids = recording.words.filter((w) => w.isFiller && kept.has(w.id)).map((w) => w.id);
+    if (ids.length) get().applyEdit(deleteWords(recording.segments, recording.words, ids, snap));
   },
 
   resetTimeline() {
-    const { project } = get();
-    if (!project) return;
-    get().applyEdit(fullSegments(project.duration));
+    const { recording } = get();
+    if (!recording) return;
+    get().applyEdit(fullSegments(recording.duration));
     set({ selection: [], clipboard: [], zoom: null });
   },
 
   undo() {
-    const { project, past, future } = get();
+    const { recording, past, future } = get();
     const prev = past.at(-1);
-    if (!project || !prev) return;
+    if (!recording || !prev) return;
     media.player?.setSegments(prev.segments);
-    set({ project: { ...project, ...prev }, past: past.slice(0, -1), future: [snapshot(project), ...future] });
+    set({ recording: { ...recording, ...prev }, past: past.slice(0, -1), future: [snapshot(recording), ...future] });
   },
 
   redo() {
-    const { project, past, future } = get();
+    const { recording, past, future } = get();
     const next = future[0];
-    if (!project || !next) return;
+    if (!recording || !next) return;
     media.player?.setSegments(next.segments);
-    set({ project: { ...project, ...next }, past: [...past, snapshot(project)], future: future.slice(1) });
+    set({ recording: { ...recording, ...next }, past: [...past, snapshot(recording)], future: future.slice(1) });
   },
 
   togglePlay() {
@@ -357,31 +579,98 @@ export const useStore = create<State>((set, get) => ({
     if (!p) return;
     if (p.playing) p.pause();
     else void p.play();
-    set({ playing: !get().playing });
+    set({ playing: !get().playing, playingPart: null });
   },
 
   seekToWord(w) {
-    const { project } = get();
-    if (!project) return;
+    const { recording } = get();
+    if (!recording) return;
     // a snapped cut can clip a word's first few ms, so fall back to its midpoint
     const t =
-      sourceToOutput(project.segments, w.start + 0.001) ?? sourceToOutput(project.segments, (w.start + w.end) / 2);
+      sourceToOutput(recording.segments, w.start + 0.001) ?? sourceToOutput(recording.segments, (w.start + w.end) / 2);
     if (t != null) media.player?.seek(t);
   },
 
   seekSource(t) {
-    const { project } = get();
-    if (!project) return;
-    let out = sourceToOutput(project.segments, t);
+    const { recording } = get();
+    if (!recording) return;
+    let out = sourceToOutput(recording.segments, t);
     if (out == null) {
       // inside a cut: jump to the start of the next kept segment in source order
-      const next = project.segments.filter((s) => s.start >= t).sort((a, b) => a.start - b.start)[0];
-      if (next) out = sourceToOutput(project.segments, next.start);
+      const next = recording.segments.filter((s) => s.start >= t).sort((a, b) => a.start - b.start)[0];
+      if (next) out = sourceToOutput(recording.segments, next.start);
     }
     if (out != null) media.player?.seek(out);
   },
 
-  seekOutput: (t) => media.player?.seek(Math.max(0, t)),
+  seekOutput(t) {
+    media.player?.seek(Math.max(0, t));
+    set({ playingPart: null });
+  },
+
+  // a waveform selection and a word selection are never both active
+  setWaveSel: (waveSel) => set(waveSel ? { waveSel, selection: [] } : { waveSel }),
+
+  playRange(start, end, partId) {
+    const p = media.player;
+    if (!p || end <= start) return;
+    void p.play(start, end);
+    set({ playing: true, playingPart: partId ?? null });
+  },
+
+  playPart(id) {
+    const { recording } = get();
+    const part = recording?.parts.find((x) => x.id === id);
+    if (!recording || !part) return;
+    // parts are source spans: play from where the first kept bit of one plays to where the last ends
+    const spans = toOutputSpans(editedPieces(recording.segments), [part]);
+    if (!spans.length) return;
+    get().playRange(Math.min(...spans.map((x) => x.outStart)), Math.max(...spans.map((x) => x.outEnd)), id);
+  },
+
+  addPartFromSelection() {
+    const { recording, waveSel } = get();
+    if (!recording || !waveSel) return;
+    const a = outputToSource(recording.segments, waveSel.start)?.source ?? waveSel.start;
+    const b = outputToSource(recording.segments, waveSel.end)?.source ?? waveSel.end;
+    const added = addPart(recording.parts, a, b, recording.duration);
+    if (!added) return;
+    commit(set, get, { parts: added.parts });
+    set({ waveSel: null, freshPart: added.part.id });
+  },
+
+  deleteWaveSel() {
+    const { recording, waveSel } = get();
+    if (!recording || !waveSel) return;
+    get().applyEdit(removeOutputRange(recording.segments, waveSel.start, waveSel.end));
+    set({ waveSel: null });
+  },
+
+  previewParts(parts) {
+    const { recording } = get();
+    if (recording) set({ recording: { ...recording, parts } });
+  },
+
+  commitParts(parts, before) {
+    if (get().recording) commit(set, get, { parts }, { parts: before });
+  },
+
+  renamePart(id, name) {
+    const { recording } = get();
+    if (!recording) return;
+    const parts = renamePart(recording.parts, id, name);
+    if (parts !== recording.parts) commit(set, get, { parts });
+    set({ freshPart: null, renamingPart: null });
+  },
+
+  setRenamingPart(renamingPart) {
+    set({ renamingPart });
+  },
+
+  deletePart(id) {
+    const { recording } = get();
+    if (recording) commit(set, get, { parts: removePart(recording.parts, id) });
+  },
 
   setQuery: (query) => set({ query, hitIndex: -1 }),
   setPanel: (panel) => set({ panel }),
@@ -394,16 +683,16 @@ export const useStore = create<State>((set, get) => ({
   },
 
   highlightWordIds(ids, color) {
-    const { project } = get();
-    if (!project || !ids.length) return;
-    commit(set, get, { highlights: highlightWords(project.highlights, project.words, ids, color) });
+    const { recording } = get();
+    if (!recording || !ids.length) return;
+    commit(set, get, { highlights: highlightWords(recording.highlights, recording.words, ids, color) });
   },
 
   nameHighlight(color, name) {
-    const { project } = get();
-    if (!project) return;
-    const highlightNames = { ...project.highlightNames, [color]: name.trim() || undefined };
-    set({ project: { ...project, highlightNames } });
+    const { recording } = get();
+    if (!recording) return;
+    const highlightNames = { ...recording.highlightNames, [color]: name.trim() || undefined };
+    set({ recording: { ...recording, highlightNames } });
   },
 
   cut() {
@@ -421,30 +710,30 @@ export const useStore = create<State>((set, get) => ({
   clearClipboard: () => set({ clipboard: [] }),
 
   shortenPauses(pauses) {
-    const { project, settings } = get();
-    if (!project) return;
-    const list = pauses ?? findPauses(displayWords(project.words, project.segments), project.segments, settings.pauseMin);
-    if (list.length) get().applyEdit(shortenInEdit(project.segments, list, settings.pauseKeep));
+    const { recording, settings } = get();
+    if (!recording) return;
+    const list = pauses ?? findPauses(displayWords(recording.words, recording.segments), recording.segments, settings.pauseMin);
+    if (list.length) get().applyEdit(shortenInEdit(recording.segments, list, settings.pauseKeep));
   },
 
   renameSpeaker(id, name) {
-    const { project } = get();
+    const { recording } = get();
     const clean = name.trim();
-    if (!project || !clean) return;
-    commit(set, get, { speakers: project.speakers.map((s) => (s.id === id ? { ...s, name: clean } : s)) });
+    if (!recording || !clean) return;
+    commit(set, get, { speakers: recording.speakers.map((s) => (s.id === id ? { ...s, name: clean } : s)) });
   },
 
   assignSpeaker(wordIds, speakerId) {
-    const { project } = get();
-    if (!project || !wordIds.length) return;
-    let speakers = project.speakers;
+    const { recording } = get();
+    if (!recording || !wordIds.length) return;
+    let speakers = recording.speakers;
     let id = speakerId;
     if (id === 'new') {
       id = newId('sp');
       speakers = [...speakers, { id, name: `Speaker ${speakers.length + 1}` }];
     }
     const ids = new Set(wordIds);
-    const words = project.words.map((w) => (ids.has(w.id) ? { ...w, speakerId: id } : w));
+    const words = recording.words.map((w) => (ids.has(w.id) ? { ...w, speakerId: id } : w));
     commit(set, get, { words, speakers });
     return id;
   },
@@ -464,20 +753,20 @@ export const useStore = create<State>((set, get) => ({
     await get().refreshLibrary();
     const last = get().library[0];
     if (!last || get().project || get().phase !== 'empty') return;
-    await get().openSaved(last.id);
+    await get().openProject(last.id);
     if (get().project?.id === last.id) set({ notice: `Reopened ${last.name}, saved ${ago(last.savedAt, Date.now())}` });
   },
 
   setNotice: (notice) => set({ notice }),
   setView: (view) => set({ view }),
   setZoom(zoom) {
-    const { project } = get();
-    set({ zoom: project ? clampView(zoom, outputDuration(project.segments)) : null });
+    const { recording } = get();
+    set({ zoom: recording ? clampView(zoom, outputDuration(recording.segments)) : null });
   },
   zoomBy(factor, anchor) {
-    const { project, zoom } = get();
-    if (!project) return;
-    const total = outputDuration(project.segments);
+    const { recording, zoom } = get();
+    if (!recording) return;
+    const total = outputDuration(recording.segments);
     const v = zoom ?? { start: 0, span: total };
     const head = media.player?.currentTime ?? 0;
     const at = anchor ?? (head >= v.start && head <= v.start + v.span ? head : v.start + v.span / 2);
@@ -485,97 +774,53 @@ export const useStore = create<State>((set, get) => ({
   },
 
   moveParagraph(key, to) {
-    const { project } = get();
-    if (!project) return;
-    const paras = currentParagraphs(project);
+    const { recording } = get();
+    if (!recording) return;
+    const paras = currentParagraphs(recording);
     const from = paras.findIndex((p) => p.key === key);
     if (from < 0) return;
     const m = paragraphMove(paras, from, to === 'up' ? from - 1 : to === 'down' ? from + 2 : to);
     if (!m) return;
-    get().applyEdit(moveInEdit(project.segments, project.words, m.ids, m.targetId, m.side, PARAGRAPH_PAD));
+    get().applyEdit(moveInEdit(recording.segments, recording.words, m.ids, m.targetId, m.side, PARAGRAPH_PAD));
     set({ moved: key });
   },
 
   selectParagraph(key) {
-    const { project } = get();
-    const para = project && currentParagraphs(project).find((p) => p.key === key);
+    const { recording } = get();
+    const para = recording && currentParagraphs(recording).find((p) => p.key === key);
     const kept = para?.words.filter((d) => !d.deleted).map((d) => d.word) ?? [];
     if (!kept.length) return;
     set({ selection: kept.map((w) => w.id) });
     get().seekToWord(kept[0]);
   },
 
-  async openSaved(id) {
-    await flushSave();
-    const player = resetSession(set);
-    const name = get().library.find((p) => p.id === id)?.name ?? 'project';
-    set({ ...FRESH, project: null, saveStatus: 'off', phase: 'decoding', progress: 0, message: `Opening ${name}` });
-    try {
-      const saved = await library.loadProject(id);
-      if (!saved) throw new Error('it was saved by a newer version of Yarnit, or is damaged');
-      const { project, transcribed } = saved;
-      const track = project.tracks[0];
-      const file = await library.loadAudio(track.id);
-      if (!file) throw new Error('its audio is missing from browser storage');
-      const buffer = await decodeFile(player.ctx, file);
-      await attachAudio(buffer, track.id, set);
-      player.setSegments(project.segments);
-      if (transcribed) {
-        set({ project, transcribed, saveStatus: 'saving', phase: 'ready', message: `Opened ${project.name}` });
-      } else {
-        // closed mid-transcription: start over (edits made meanwhile only touched segments, which stay)
-        set({ project: { ...project, words: [] }, transcribed, saveStatus: 'saving', phase: 'downloading', message: 'Loading speech model' });
-        transcribe(track.id, set, get);
-      }
-    } catch (err) {
-      set({ phase: 'error', message: `Could not open ${name}: ${(err as Error).message}` });
-    }
-  },
-
-  async deleteSaved(summary) {
-    try {
-      if (get().project?.id === summary.id) await get().closeProject();
-      await library.deleteProject(summary);
-    } catch {
-      // nothing useful to tell the user; the list below shows what is still there
-    }
-    await get().refreshLibrary();
-  },
-
-  async closeProject() {
-    await flushSave();
-    resetSession(set);
-    set({ ...FRESH, project: null, transcribed: false, saveStatus: 'off', phase: 'empty', progress: 0, message: '' });
-    await get().refreshLibrary();
-  },
-
   stepHit(dir) {
-    const { project, query, hitIndex } = get();
-    if (!project) return;
-    const hits = searchHits(displayWords(project.words, project.segments), query);
+    const { recording, query, hitIndex } = get();
+    if (!recording) return;
+    const hits = searchHits(displayWords(recording.words, recording.segments), query);
     if (!hits.length) return;
     const i = (hitIndex + dir + hits.length) % hits.length;
-    const first = project.words.find((w) => w.id === hits[i][0]);
+    const first = recording.words.find((w) => w.id === hits[i][0]);
     set({ hitIndex: i, selection: hits[i] });
     if (first) get().seekToWord(first);
   },
 
   deleteHits() {
-    const { project, query } = get();
-    if (!project) return;
-    const ids = searchHits(displayWords(project.words, project.segments), query).flat();
-    if (ids.length) get().applyEdit(deleteWords(project.segments, project.words, ids, snap));
+    const { recording, query } = get();
+    if (!recording) return;
+    const ids = searchHits(displayWords(recording.words, recording.segments), query).flat();
+    if (ids.length) get().applyEdit(deleteWords(recording.segments, recording.words, ids, snap));
     set({ selection: [], hitIndex: -1 });
   },
 
   async exportAudio(format) {
-    const { project } = get();
-    if (!project) return;
+    const { recording } = get();
+    if (!recording) return;
     set({ phase: 'exporting', progress: 0, message: `Exporting ${format.toUpperCase()}` });
-    const tracks = project.tracks.map((t) => ({ channels: channelsOf(media.buffers.get(t.id)!), offset: t.offset }));
-    const channels = renderEdit(tracks, project.segments, project.sampleRate);
+    const tracks = recording.tracks.map((t) => ({ channels: channelsOf(media.buffers.get(t.id)!), offset: t.offset }));
+    const channels = renderEdit(tracks, recording.segments, recording.sampleRate);
     const worker = new Worker(new URL('../workers/export.worker.ts', import.meta.url), { type: 'module' });
-    const req: ExportRequest = { channels, sampleRate: project.sampleRate, format };
+    const req: ExportRequest = { channels, sampleRate: recording.sampleRate, format };
     worker.postMessage(req, channels.map((c) => c.buffer as ArrayBuffer));
     await new Promise<void>((resolve) => {
       worker.onerror = () => {
@@ -590,7 +835,7 @@ export const useStore = create<State>((set, get) => ({
           resolve();
         }
         if (m.type === 'done') {
-          const base = project.name.replace(/\.[^.]+$/, '');
+          const base = recording.name.replace(/\.[^.]+$/, '');
           download(new Blob([m.data], { type: m.mimeType }), `${base}-edited${m.extension}`);
           set({ phase: 'ready', message: 'Export finished' });
           resolve();
@@ -609,51 +854,189 @@ function download(blob: Blob, name: string) {
   setTimeout(() => URL.revokeObjectURL(a.href), 10_000);
 }
 
-let worker: Worker | null = null;
 let resumed = false;
+/** The recording an openRecording call is decoding, so a slower earlier call can't win. */
+let opening: string | null = null;
 
-function transcribe(trackId: string, set: (p: Partial<State>) => void, get: () => State) {
-  worker?.terminate();
-  worker = new Worker(new URL('../workers/transcribe.worker.ts', import.meta.url), { type: 'module' });
-  const { model, language, device } = get().settings;
-  const audio = media.mono16k!.slice(); // copy: we keep the original for snapping
-  const req: TranscribeRequest = { audio, model, device, ...(language ? { language } : {}) };
-  // a worker that fails to load (dev server gone, offline) never posts a message: say so instead of hanging
-  worker.onerror = () =>
-    set({ phase: 'error', message: 'Transcription could not start: the speech worker failed to load. Reload the page and try again.' });
-  worker.postMessage(req, [audio.buffer]);
-  worker.onmessage = (e: MessageEvent<TranscribeMessage>) => {
-    const m = e.data;
-    const project = get().project;
-    if (!project) return;
-    if (m.type === 'download') set({ phase: 'downloading', progress: m.progress });
-    if (m.type === 'ready') set({ phase: 'transcribing', progress: 0, message: `Transcribing (${m.device})` });
-    if (m.type === 'words') {
-      const mono = media.mono16k!;
-      const words: Word[] = m.words.map((w) => ({
-        id: newId('w'),
-        ...w,
-        // Whisper stretches word ends over pauses; trim to where the sound stops
-        end: speechEnd(mono, WHISPER_SAMPLE_RATE, w.start, w.end, media.silence),
-        trackId,
-        speakerId: project.tracks.find((t) => t.id === trackId)?.speakerId,
-        isFiller: isFillerText(w.text),
-      }));
-      set({ project: { ...project, words: [...project.words, ...words] }, progress: m.progress });
-    }
-    if (m.type === 'done') set({ phase: 'ready', progress: 1, transcribed: true, message: 'Transcript ready' });
-    if (m.type === 'error') set({ phase: 'error', message: `Transcription failed: ${m.message}` });
-  };
+async function decodeBlob(blob: Blob) {
+  media.player ??= new Player();
+  return decodeFile(media.player.ctx, blob);
 }
 
-// Autosave: every change to the project (edits, transcript words as they arrive, names) is written
-// to IndexedDB shortly after it happens. Undo history is not saved: a reopened project starts fresh.
+function persistProject(set: (p: Partial<State>) => void, project: Project) {
+  set({ project });
+  library.saveProject(toSavedProject(project, Date.now())).catch(() => set({ saveStatus: 'error' }));
+}
+
+async function createProject(set: (p: Partial<State>) => void, get: () => State, name: string) {
+  const project: Project = { id: newId('pj'), name, recordingIds: [] };
+  set({ project, recordings: [] });
+  await library.saveProject(toSavedProject(project, Date.now())).catch(() => set({ saveStatus: 'error' }));
+  void get().refreshLibrary();
+}
+
+/**
+ * Change a recording whether or not it is open. `after` runs on the saved record and returns
+ * whether it now counts as transcribed.
+ */
+async function updateRecording(
+  set: (p: Partial<State>) => void,
+  get: () => State,
+  id: string,
+  change: (r: Recording) => Recording,
+  after?: (saved: SavedRecording) => boolean,
+) {
+  const open = get().recording;
+  if (open?.id === id) {
+    const recording = change(open);
+    const transcribed = after ? after({ version: 0, savedAt: 0, transcribed: get().transcribed, recording }) : get().transcribed;
+    // the sidebar shows the change now; autosave writes it a moment later
+    set({ recording, transcribed, recordings: get().recordings.map((r) => (r.id === id ? { ...r, name: recording.name, kind: recording.kind, transcribed } : r)) });
+    return;
+  }
+  const saved = await library.loadRecording(id);
+  if (!saved) return;
+  const recording = change(saved.recording);
+  const transcribed = after ? after({ ...saved, recording }) : saved.transcribed;
+  const next = toSavedRecording(recording, transcribed, Date.now());
+  await library.saveRecording(next).catch(() => set({ saveStatus: 'error' }));
+  set({ recordings: get().recordings.map((r) => (r.id === id ? summarizeRecording(next) : r)) });
+}
+
+// Background transcription: one recording at a time, in the order they were added. Words go into
+// the open recording live; for a recording that isn't open they are kept here and saved at the end.
+type Job = { id: string; words: Word[]; worker: Worker | null };
+let running: Job | null = null;
+const queue: string[] = [];
+
+function enqueue(id: string) {
+  if (running?.id === id || queue.includes(id)) return;
+  queue.push(id);
+  useStore.setState({ queued: [...queue] });
+  void pump();
+}
+
+function dequeue(id: string) {
+  const i = queue.indexOf(id);
+  if (i >= 0) queue.splice(i, 1);
+  if (running?.id === id) {
+    running.worker?.terminate();
+    running = null;
+    useStore.setState({ transcribing: null });
+    void pump();
+  }
+  useStore.setState({ queued: [...queue] });
+}
+
+async function pump() {
+  if (running || !queue.length) return;
+  const job: Job = { id: queue.shift()!, words: [], worker: null };
+  running = job;
+  useStore.setState({ queued: [...queue], transcribing: { id: job.id, stage: 'download', progress: 0 } });
+  try {
+    const st = useStore.getState();
+    let recording: Recording;
+    let mono: Float32Array;
+    let silence: number;
+    if (st.recording?.id === job.id && media.mono16k) {
+      recording = st.recording;
+      mono = media.mono16k;
+      silence = media.silence;
+    } else {
+      const saved = await library.loadRecording(job.id);
+      if (!saved || !isSpeech(saved.recording.kind)) return;
+      recording = saved.recording;
+      const blob = await library.loadAudio(recording.tracks[0].id);
+      if (!blob) return;
+      mono = await toWhisperMono(await decodeBlob(blob));
+      silence = silenceThreshold(mono, WHISPER_SAMPLE_RATE);
+    }
+    if (running !== job) return; // cancelled while decoding
+    await runWorker(job, mono, silence, recording.tracks[0]);
+  } catch {
+    // a recording that can't be read is skipped; opening it shows the reason
+  } finally {
+    if (running === job) {
+      running = null;
+      useStore.setState({ transcribing: null });
+    }
+    void pump();
+  }
+}
+
+function runWorker(job: Job, mono: Float32Array, silence: number, track: Recording['tracks'][number]) {
+  const set = useStore.setState;
+  const get = useStore.getState;
+  const isOpen = () => get().recording?.id === job.id;
+  const worker = new Worker(new URL('../workers/transcribe.worker.ts', import.meta.url), { type: 'module' });
+  job.worker = worker;
+  const { model, language, device } = get().settings;
+  const audio = mono.slice(); // copy: the original stays for snapping
+  const req: TranscribeRequest = { audio, model, device, ...(language ? { language } : {}) };
+  return new Promise<void>((resolve) => {
+    const fail = (message: string) => {
+      if (isOpen()) set({ phase: 'error', message });
+      else set({ notice: message });
+      worker.terminate();
+      resolve();
+    };
+    // a worker that fails to load (dev server gone, offline) never posts a message: say so instead of hanging
+    worker.onerror = () => fail('Transcription could not start: the speech worker failed to load. Reload the page and try again.');
+    worker.onmessage = async (e: MessageEvent<TranscribeMessage>) => {
+      const m = e.data;
+      if (running !== job) return;
+      if (m.type === 'download') {
+        set({ transcribing: { id: job.id, stage: 'download', progress: m.progress } });
+        if (isOpen()) set({ phase: 'downloading', progress: m.progress, message: 'Loading speech model' });
+      }
+      if (m.type === 'ready') {
+        set({ transcribing: { id: job.id, stage: 'transcribing', progress: 0 } });
+        if (isOpen()) set({ phase: 'transcribing', progress: 0, message: `Transcribing (${m.device})` });
+      }
+      if (m.type === 'words') {
+        const words: Word[] = m.words.map((w) => ({
+          id: newId('w'),
+          ...w,
+          // Whisper stretches word ends over pauses; trim to where the sound stops
+          end: speechEnd(mono, WHISPER_SAMPLE_RATE, w.start, w.end, silence),
+          trackId: track.id,
+          speakerId: track.speakerId,
+          isFiller: isFillerText(w.text),
+        }));
+        job.words = [...job.words, ...words];
+        set({ transcribing: { id: job.id, stage: 'transcribing', progress: m.progress } });
+        const open = get().recording;
+        if (open?.id === job.id) set({ recording: { ...open, words: job.words }, progress: m.progress });
+      }
+      if (m.type === 'done') {
+        if (isOpen()) {
+          set({ phase: 'ready', progress: 1, transcribed: true, message: 'Transcript ready' });
+        } else {
+          // not open: write the finished transcript into its saved record (which may hold newer edits)
+          const saved = await library.loadRecording(job.id);
+          if (saved) {
+            const next = toSavedRecording({ ...saved.recording, words: job.words }, true, Date.now());
+            await library.saveRecording(next).catch(() => undefined);
+            set({ recordings: get().recordings.map((r) => (r.id === job.id ? summarizeRecording(next) : r)) });
+          }
+        }
+        worker.terminate();
+        resolve();
+      }
+      if (m.type === 'error') fail(`Transcription failed: ${m.message}`);
+    };
+    worker.postMessage(req, [audio.buffer]);
+  });
+}
+
+// Autosave: every change to the recording (edits, transcript words as they arrive, names) is written
+// to IndexedDB shortly after it happens. Undo history is not saved: a reopened recording starts fresh.
 const SAVE_DELAY_MS = 800;
 let pendingSave: ReturnType<typeof setTimeout> | undefined;
 
 useStore.subscribe((s, prev) => {
-  if (!s.project || s.saveStatus === 'off') return;
-  if (s.project === prev.project && s.transcribed === prev.transcribed && prev.saveStatus !== 'off') return;
+  if (!s.recording || s.saveStatus === 'off') return;
+  if (s.recording === prev.recording && s.transcribed === prev.transcribed && prev.saveStatus !== 'off') return;
   clearTimeout(pendingSave);
   pendingSave = setTimeout(() => void flushSave(), SAVE_DELAY_MS);
 });
@@ -662,14 +1045,17 @@ async function flushSave() {
   if (pendingSave === undefined) return;
   clearTimeout(pendingSave);
   pendingSave = undefined;
-  const { project, transcribed, saveStatus } = useStore.getState();
-  if (!project || saveStatus === 'off') return;
+  const { recording, transcribed, saveStatus } = useStore.getState();
+  if (!recording || saveStatus === 'off') return;
   useStore.setState({ saveStatus: 'saving' });
   try {
     const now = Date.now();
-    await library.saveProject(toSaved(project, transcribed, now));
-    // a different project may have opened while this one was writing
-    if (useStore.getState().project?.id === project.id) useStore.setState({ saveStatus: 'saved', savedAt: now });
+    const saved = toSavedRecording(recording, transcribed, now);
+    await library.saveRecording(saved);
+    const st = useStore.getState();
+    useStore.setState({ recordings: st.recordings.map((r) => (r.id === recording.id ? summarizeRecording(saved) : r)) });
+    // a different recording may have opened while this one was writing
+    if (st.recording?.id === recording.id) useStore.setState({ saveStatus: 'saved', savedAt: now });
   } catch {
     useStore.setState({ saveStatus: 'error' });
   }

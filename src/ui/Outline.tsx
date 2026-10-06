@@ -3,7 +3,7 @@
 import { useMemo, useRef, useState } from 'react';
 import { outputDuration, sourceToOutput } from '../engine/edl';
 import { wordColors } from '../engine/highlights';
-import type { HighlightColor, Project } from '../engine/types';
+import type { HighlightColor, Recording } from '../engine/types';
 import type { Paragraph } from '../engine/view';
 import { currentParagraphs, useStore } from '../state/store';
 import { HIGHLIGHT_NAMES } from './colors';
@@ -12,24 +12,24 @@ import { fmt, speakerColor, trackLabel } from './util';
 
 type Row = { p: Paragraph; text: string; at: number; length: number; colors: HighlightColor[] };
 
-export function Outline({ project }: { project: Project }) {
+export function Outline({ recording }: { recording: Recording }) {
   const selection = useStore((s) => s.selection);
   const moved = useStore((s) => s.moved);
-  const paras = currentParagraphs(project);
+  const paras = currentParagraphs(recording);
   /** Insertion index (0 to rows.length) while a row is dragged over the list. */
   const [dropAt, setDropAt] = useState<number | null>(null);
   const dragKey = useRef<string | null>(null);
 
   const rows = useMemo<Row[]>(() => {
-    const byWord = wordColors(project.words, project.highlights);
-    const total = outputDuration(project.segments);
-    const starts = paras.map((p) => sourceToOutput(project.segments, p.start + 0.001) ?? 0);
+    const byWord = wordColors(recording.words, recording.highlights);
+    const total = outputDuration(recording.segments);
+    const starts = paras.map((p) => sourceToOutput(recording.segments, p.start + 0.001) ?? 0);
     return paras.map((p, i) => {
       const kept = p.words.filter((d) => !d.deleted).map((d) => d.word);
       const colors = [...new Set(kept.map((w) => byWord.get(w.id)).filter((c): c is HighlightColor => !!c))];
       return { p, text: kept.map((w) => w.text).join(' '), at: starts[i], length: (starts[i + 1] ?? total) - starts[i], colors };
     });
-  }, [paras, project]);
+  }, [paras, recording]);
 
   const current = paras.find((p) => p.words.some((d) => d.word.id === selection[0]))?.key;
   const st = useStore.getState();
@@ -46,7 +46,7 @@ export function Outline({ project }: { project: Project }) {
           {dropAt === i && <div className="drop-line" />}
           <div
             className={`orow${p.key === current ? ' on' : ''}${p.key === moved ? ' flash' : ''}`}
-            style={{ '--c': speakerColor(project, p.trackId, p.speakerId) } as React.CSSProperties}
+            style={{ '--c': speakerColor(recording, p.trackId, p.speakerId) } as React.CSSProperties}
             data-key={p.key}
             onClick={() => st.selectParagraph(p.key)}
             onDragOver={(e) => {
@@ -81,12 +81,12 @@ export function Outline({ project }: { project: Project }) {
               ⋮⋮
             </span>
             <div className="who">
-              <b>{trackLabel(project, p.trackId, p.speakerId)}</b>
+              <b>{trackLabel(recording, p.trackId, p.speakerId)}</b>
               <span className="mono muted">{fmt(at)}</span>
             </div>
             <span className="txt">
               {colors.map((c) => (
-                <i key={c} className={`dot hl-${c}`} title={project.highlightNames[c] || HIGHLIGHT_NAMES[c]} />
+                <i key={c} className={`dot hl-${c}`} title={recording.highlightNames[c] || HIGHLIGHT_NAMES[c]} />
               ))}
               {text}
             </span>

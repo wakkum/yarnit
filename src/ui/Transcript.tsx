@@ -1,12 +1,14 @@
 import { memo, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { displayWords, findPauses, outputDuration, sourceToOutput, type DisplayWord, type Pause } from '../engine/edl';
 import { wordColors } from '../engine/highlights';
-import { HIGHLIGHT_COLORS, type HighlightColor, type Project } from '../engine/types';
+import { wordParts, wordsInOutput } from '../engine/parts';
+import { HIGHLIGHT_COLORS, isSpeech, type HighlightColor, type Part, type Recording } from '../engine/types';
 import { searchHits, type Paragraph } from '../engine/view';
 import { currentParagraphs, useStore } from '../state/store';
 import { HIGHLIGHT_NAMES } from './colors';
 import { combo } from './keys';
 import { MoveButtons, Outline } from './Outline';
+import { Parts } from './Parts';
 import { fmt, speakerColor, trackLabel, usePlayheadValue } from './util';
 
 type Marks = {
@@ -21,6 +23,11 @@ type Marks = {
   /** Pause chips keyed by the word they follow; a leading pause is keyed by the word it precedes. */
   pauseAfter: Map<string, Pause>;
   pauseBefore: Map<string, Pause>;
+  /** Kept words under the waveform selection. */
+  waveSel: Set<string>;
+  /** Part per word, and the parts that start at a word (their name tag goes there). */
+  part: Map<string, Part>;
+  partStart: Map<string, Part[]>;
 };
 
 const Word = memo(function Word({
@@ -32,6 +39,7 @@ const Word = memo(function Word({
   cur,
   clip,
   color,
+  wave,
   onPick,
 }: {
   d: DisplayWord;
@@ -42,6 +50,7 @@ const Word = memo(function Word({
   cur: boolean;
   clip: boolean;
   color?: { color: HighlightColor; joinNext: boolean };
+  wave: boolean;
   onPick: (i: number, shift: boolean) => void;
 }) {
   const cls = ['w'];
@@ -53,6 +62,7 @@ const Word = memo(function Word({
     if (sel) cls.push('sel', ...(sel.first ? ['sel-first'] : []), ...(sel.last ? ['sel-last'] : []));
     if (cur) cls.push('cur');
     if (clip) cls.push('clip');
+    if (wave) cls.push('wsel');
   }
   return (
     <>
@@ -87,13 +97,14 @@ function PauseChip({ p }: { p: Pause }) {
 }
 
 export function Transcript() {
-  const project = useStore((s) => s.project)!;
+  const recording = useStore((s) => s.recording)!;
   const selection = useStore((s) => s.selection);
   const clipboard = useStore((s) => s.clipboard);
   const query = useStore((s) => s.query);
   const hitIndex = useStore((s) => s.hitIndex);
   const phase = useStore((s) => s.phase);
   const pauseMin = useStore((s) => s.settings.pauseMin);
+  const waiting = useStore((s) => s.queued.includes(s.recording?.id ?? ''));
   const anchor = useRef<number | null>(null);
   /** Mouse drag in progress: the word index it started on, and whether it has left that word. */
   const drag = useRef<{ start: number; moved: boolean } | null>(null);
@@ -102,11 +113,11 @@ export function Transcript() {
   const inner = useRef<HTMLDivElement>(null);
   const [openSpeaker, setOpenSpeaker] = useState<string | null>(null);
 
-  const display = useMemo(() => displayWords(project.words, project.segments), [project.words, project.segments]);
-  const paras = currentParagraphs(project);
+  const display = useMemo(() => displayWords(recording.words, recording.segments), [recording.words, recording.segments]);
+  const paras = currentParagraphs(recording);
   const view = useStore((s) => s.view);
   const moved = useStore((s) => s.moved);
-  const total = useMemo(() => outputDuration(project.segments), [project.segments]);
+  const total = useMemo(() => outputDuration(recording.segments), [recording.segments]);
 
   // let the moved paragraph glow, bring it into view, then forget it
   useEffect(() => {
@@ -114,19 +125,19 @@ export function Transcript() {
     document.querySelector(`[data-key="${moved}"]`)?.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
     const t = setTimeout(() => useStore.setState({ moved: null }), 1400);
     return () => clearTimeout(t);
-  }, [moved, project.segments]);
+  }, [moved, recording.segments]);
   const indexOf = useMemo(() => new Map(display.map((d, i) => [d.word.id, i])), [display]);
   const hits = useMemo(() => searchHits(display, query), [display, query]);
   const pauses = useMemo(
-    () => (phase === 'ready' ? findPauses(display, project.segments, pauseMin) : []),
-    [display, project.segments, pauseMin, phase],
+    () => (phase === 'ready' ? findPauses(display, recording.segments, pauseMin) : []),
+    [display, recording.segments, pauseMin, phase],
   );
 
   const current = usePlayheadValue<string | null>(
-    project,
+    recording,
     (_, source) => {
       if (source == null) return null;
-      return project.words.find((w) => source >= w.start && source < w.end)?.id ?? null;
+      return recording.words.find((w) => source >= w.start && source < w.end)?.id ?? null;
     },
     null,
   );
@@ -142,7 +153,7 @@ export function Transcript() {
   }, [selection, display]);
 
   const colors = useMemo(() => {
-    const byWord = wordColors(project.words, project.highlights);
+    const byWord = wordColors(recording.words, recording.highlights);
     const kept = display.filter((d) => !d.deleted).map((d) => d.word.id);
     const out = new Map<string, { color: HighlightColor; joinNext: boolean }>();
     kept.forEach((id, i) => {
@@ -150,7 +161,14 @@ export function Transcript() {
       if (c) out.set(id, { color: c, joinNext: byWord.get(kept[i + 1]) === c });
     });
     return out;
-  }, [project.words, project.highlights, display]);
+  }, [recording.words, recording.highlights, display]);
+
+  const waveSel = useStore((s) => s.waveSel);
+  const waveWords = useMemo(
+    () => new Set(waveSel ? wordsInOutput(display, recording.segments, waveSel.start, waveSel.end) : []),
+    [display, recording.segments, waveSel],
+  );
+  const inParts = useMemo(() => wordParts(display, recording.parts), [display, recording.parts]);
 
   const marks: Marks = {
     selected,
@@ -161,6 +179,9 @@ export function Transcript() {
     current,
     pauseAfter: new Map(pauses.filter((p) => p.afterId).map((p) => [p.afterId!, p])),
     pauseBefore: new Map(pauses.filter((p) => !p.afterId).map((p) => [p.beforeId!, p])),
+    waveSel: waveWords,
+    part: inParts.byWord,
+    partStart: inParts.startsAt,
   };
 
   const selectRange = useMemo(
@@ -242,11 +263,17 @@ export function Transcript() {
     }
   };
 
-  if (!project.words.length) {
+  if (!isSpeech(recording.kind)) return <Parts recording={recording} />;
+
+  if (!recording.words.length) {
     return (
       <main className="doc">
         <div className="doc-inner muted">
-          {phase === 'error' ? 'No transcript.' : 'The transcript appears here as it is made, about 30 seconds of audio at a time. The first part can take a little while.'}
+          {phase === 'error'
+            ? 'No transcript.'
+            : waiting
+              ? 'Waiting to be transcribed: other recordings in this project are first in line. You can play it meanwhile.'
+              : 'The transcript appears here as it is made, about 30 seconds of audio at a time. The first part can take a little while.'}
         </div>
       </main>
     );
@@ -285,14 +312,14 @@ export function Transcript() {
             </span>
           )}
         </div>
-        {view === 'outline' && <Outline project={project} />}
+        {view === 'outline' && <Outline recording={recording} />}
         {view === 'transcript' && paras.map((p, i) => (
           <Para
             key={p.key}
             first={i === 0}
             last={i === paras.length - 1}
             flash={p.key === moved}
-            project={project}
+            recording={recording}
             para={p}
             marks={marks}
             indexOf={indexOf}
@@ -316,7 +343,7 @@ export function Transcript() {
 function SelectionBar({ inner }: { inner: React.RefObject<HTMLDivElement | null> }) {
   const selection = useStore((s) => s.selection);
   const clipboard = useStore((s) => s.clipboard);
-  const project = useStore((s) => s.project);
+  const recording = useStore((s) => s.recording);
   const [pos, setPos] = useState<{ left: number; top: number; transform?: string } | null>(null);
   const bar = useRef<HTMLDivElement>(null);
 
@@ -345,7 +372,7 @@ function SelectionBar({ inner }: { inner: React.RefObject<HTMLDivElement | null>
     place();
     window.addEventListener('resize', place);
     return () => window.removeEventListener('resize', place);
-  }, [inner, selection, clipboard, project, show]);
+  }, [inner, selection, clipboard, recording, show]);
 
   if (!show) return null;
   const st = useStore.getState();
@@ -392,7 +419,7 @@ function Para({
   first,
   last,
   flash,
-  project,
+  recording,
   para,
   marks,
   indexOf,
@@ -403,7 +430,7 @@ function Para({
   first: boolean;
   last: boolean;
   flash: boolean;
-  project: Project;
+  recording: Recording;
   para: Paragraph;
   marks: Marks;
   indexOf: Map<string, number>;
@@ -411,18 +438,20 @@ function Para({
   open: boolean;
   setOpen: (open: boolean) => void;
 }) {
-  const out = sourceToOutput(project.segments, para.start + 0.001);
+  const out = sourceToOutput(recording.segments, para.start + 0.001);
+  // a bar in the margin per part this paragraph holds words of (mockups/speech-parts-c-margin.html)
+  const bars = [...new Map(para.words.flatMap((d) => (marks.part.has(d.word.id) ? [marks.part.get(d.word.id)!] : [])).map((p) => [p.id, p])).values()];
   return (
     <div className={`para${flash ? ' flash' : ''}${para.words.some((d) => marks.selected.has(d.word.id)) ? ' has-sel' : ''}`} data-key={para.key}>
       <div className="para-label" style={{ position: 'relative' }}>
         <button
           className={`who${open ? ' open' : ''}`}
-          style={{ color: speakerColor(project, para.trackId, para.speakerId) }}
+          style={{ color: speakerColor(recording, para.trackId, para.speakerId) }}
           onClick={() => setOpen(!open)}
           aria-expanded={open}
           title="Rename speaker or change who said this"
         >
-          {trackLabel(project, para.trackId, para.speakerId)}
+          {trackLabel(recording, para.trackId, para.speakerId)}
         </button>
         <span className="ts mono">{out == null ? 'cut' : fmt(out)}</span>
         {!(first && last) && (
@@ -430,15 +459,23 @@ function Para({
             <MoveButtons k={para.key} first={first} last={last} />
           </span>
         )}
-        {open && <SpeakerMenu project={project} para={para} close={() => setOpen(false)} />}
+        {open && <SpeakerMenu recording={recording} para={para} close={() => setOpen(false)} />}
       </div>
       <p>
+        {bars.map((b, k) => (
+          <span key={b.id} className={`part-bar hl-${b.color}`} style={{ left: -10 - k * 6 }} title={b.name} />
+        ))}
         {para.words.map((d) => {
           const id = d.word.id;
           const before = marks.pauseBefore.get(id);
           const after = marks.pauseAfter.get(id);
           return (
             <span key={id} style={{ display: 'contents' }}>
+              {marks.partStart.get(id)?.map((pt) => (
+                <button key={pt.id} className={`part-tag hl-${pt.color}`} onClick={() => useStore.getState().playPart(pt.id)} title={`Play ${pt.name}`}>
+                  {pt.name}
+                </button>
+              ))}
               {before && <PauseChip p={before} />}
               <Word
                 d={d}
@@ -449,6 +486,7 @@ function Para({
                 cur={marks.current === id}
                 clip={marks.clip.has(id)}
                 color={marks.color.get(id)}
+                wave={marks.waveSel.has(id)}
                 onPick={onPick}
               />
               {after && <PauseChip p={after} />}
@@ -461,17 +499,17 @@ function Para({
 }
 
 function SpeakerMenu({
-  project,
+  recording,
   para,
   close,
 }: {
-  project: Project;
+  recording: Recording;
   para: Paragraph;
   close: () => void;
 }) {
   const ref = useRef<HTMLDivElement>(null);
   const currentId = para.speakerId;
-  const current = project.speakers.find((s) => s.id === currentId);
+  const current = recording.speakers.find((s) => s.id === currentId);
   const { assignSpeaker } = useStore.getState();
   const wordIds = para.words.map((d) => d.word.id);
 
@@ -495,7 +533,7 @@ function SpeakerMenu({
       {current && <RenameForm key={current.id + current.name} id={current.id} name={current.name} />}
       <h4 style={{ marginTop: 14 }}>This paragraph is by</h4>
       <div className="list">
-        {project.speakers.map((s) => (
+        {recording.speakers.map((s) => (
           <button
             key={s.id}
             onClick={() => {
@@ -504,7 +542,7 @@ function SpeakerMenu({
             }}
             disabled={s.id === currentId}
           >
-            <span className="dot" style={{ background: speakerColor(project, para.trackId, s.id) }} />
+            <span className="dot" style={{ background: speakerColor(recording, para.trackId, s.id) }} />
             {s.name}
             {s.id === currentId && <span className="muted">(current)</span>}
           </button>

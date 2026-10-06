@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { outputToSource } from '../engine/edl';
-import type { Project, Segment } from '../engine/types';
+import type { Recording, Segment } from '../engine/types';
 import { media } from '../state/store';
 
 export const fmt = (s: number) => {
@@ -10,19 +10,29 @@ export const fmt = (s: number) => {
   return h ? `${h}:${String(m).padStart(2, '0')}:${sec}` : `${m}:${sec}`;
 };
 
+/** "0:06.4 to 0:41.0 · 34.6 s": parts are often short, so tenths matter. */
+export const rangeLabel = (a: number, b: number) => {
+  const t = (x: number) => {
+    const r = Math.round(x * 10) / 10;
+    return `${fmt(r)}.${Math.round((r % 1) * 10)}`;
+  };
+  const len = b - a;
+  return `${t(a)} to ${t(b)} · ${len < 60 ? `${len.toFixed(1)} s` : fmt(len)}`;
+};
+
 export const trackColor = (i: number) => `var(--sp${(i % 4) + 1})`;
 
 /** Colour for a speaker: by position in the speaker list, else by track. */
-export function speakerColor(project: Project, trackId: string, speakerId?: string) {
-  const i = project.speakers.findIndex((s) => s.id === speakerId);
-  return trackColor(i >= 0 ? i : project.tracks.findIndex((t) => t.id === trackId));
+export function speakerColor(recording: Recording, trackId: string, speakerId?: string) {
+  const i = recording.speakers.findIndex((s) => s.id === speakerId);
+  return trackColor(i >= 0 ? i : recording.tracks.findIndex((t) => t.id === trackId));
 }
 
 /** Display name for a track: speaker name if set, else "Speaker N". */
-export function trackLabel(project: Project, trackId: string, speakerId?: string) {
-  const sp = speakerId && project.speakers.find((s) => s.id === speakerId);
+export function trackLabel(recording: Recording, trackId: string, speakerId?: string) {
+  const sp = speakerId && recording.speakers.find((s) => s.id === speakerId);
   if (sp) return sp.name;
-  return `Speaker ${project.tracks.findIndex((t) => t.id === trackId) + 1}`;
+  return `Speaker ${recording.tracks.findIndex((t) => t.id === trackId) + 1}`;
 }
 
 /** Source-time gaps not covered by any segment, i.e. what has been cut. */
@@ -39,27 +49,27 @@ export function cutRegions(segments: Segment[], duration: number): [number, numb
 }
 
 /** Calls fn every animation frame with the playhead's output and source time. */
-export function usePlayhead(project: Project | null, fn: (out: number, source: number | null) => void) {
+export function usePlayhead(recording: Recording | null, fn: (out: number, source: number | null) => void) {
   const fnRef = useRef(fn);
   useEffect(() => {
     fnRef.current = fn;
   });
   useEffect(() => {
-    if (!project) return;
+    if (!recording) return;
     let raf = 0;
     const tick = () => {
       const out = media.player?.currentTime ?? 0;
-      fnRef.current(out, outputToSource(project.segments, out)?.source ?? null);
+      fnRef.current(out, outputToSource(recording.segments, out)?.source ?? null);
       raf = requestAnimationFrame(tick);
     };
     raf = requestAnimationFrame(tick);
     return () => cancelAnimationFrame(raf);
-  }, [project]);
+  }, [recording]);
 }
 
 /** Re-renders only when the derived value changes, not every frame. */
-export function usePlayheadValue<T>(project: Project | null, derive: (out: number, source: number | null) => T, initial: T) {
+export function usePlayheadValue<T>(recording: Recording | null, derive: (out: number, source: number | null) => T, initial: T) {
   const [value, setValue] = useState<T>(initial);
-  usePlayhead(project, (o, s) => setValue(derive(o, s)));
+  usePlayhead(recording, (o, s) => setValue(derive(o, s)));
   return value;
 }

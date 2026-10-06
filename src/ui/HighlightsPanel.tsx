@@ -10,15 +10,15 @@ import { combo } from './keys';
 import { fmt } from './util';
 
 export function HighlightsPanel() {
-  const project = useStore((s) => s.project);
+  const recording = useStore((s) => s.recording);
   const { setPanel } = useStore.getState();
   const [pick, setPick] = useState<Set<HighlightColor>>(new Set(['red']));
 
   const list = useMemo(() => {
-    if (!project) return [];
-    const display = displayWords(project.words, project.segments);
-    return passages(display, project.segments, wordColors(project.words, project.highlights));
-  }, [project]);
+    if (!recording) return [];
+    const display = displayWords(recording.words, recording.segments);
+    return passages(display, recording.segments, wordColors(recording.words, recording.highlights));
+  }, [recording]);
 
   const byColor = HIGHLIGHT_COLORS.map((c) => [c, list.filter((p) => p.color === c)] as const).filter(([, ps]) => ps.length);
 
@@ -30,7 +30,7 @@ export function HighlightsPanel() {
           ✕
         </button>
       </div>
-      {!project || !byColor.length ? (
+      {!recording || !byColor.length ? (
         <p className="muted" style={{ lineHeight: 1.55 }}>
           No highlights yet. Select words in the transcript and pick a colour in the bar that appears, or press{' '}
           <kbd>1</kbd> to <kbd>6</kbd>. <kbd>0</kbd> removes a highlight.
@@ -41,7 +41,7 @@ export function HighlightsPanel() {
             <div className={`grp hl-${color}`}>
               <span className={`dot swatch hl-${color}`} />
               <b>{HIGHLIGHT_NAMES[color]}</b>
-              <NameInput key={project.highlightNames[color] ?? ''} color={color} value={project.highlightNames[color] ?? ''} />
+              <NameInput key={recording.highlightNames[color] ?? ''} color={color} value={recording.highlightNames[color] ?? ''} />
               <span className="muted mono">{ps.length}</span>
             </div>
             {ps.map((p) => (
@@ -66,7 +66,7 @@ export function HighlightsPanel() {
                 }}
               />
               <span className={`dot swatch hl-${c}`} />
-              {project?.highlightNames[c] || HIGHLIGHT_NAMES[c]}
+              {recording?.highlightNames[c] || HIGHLIGHT_NAMES[c]}
             </label>
           ))}
         </div>
@@ -106,7 +106,7 @@ function Clip({ p }: { p: Passage }) {
         className="clip-main"
         title="Jump to this passage and select it"
         onClick={() => {
-          const first = st.project?.words.find((w) => w.id === p.wordIds[0]);
+          const first = st.recording?.words.find((w) => w.id === p.wordIds[0]);
           st.select(p.wordIds);
           if (first) st.seekToWord(first);
           document.querySelector(`[data-wid="${p.wordIds[0]}"]`)?.scrollIntoView({ block: 'center', behavior: 'smooth' });
