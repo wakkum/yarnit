@@ -2,6 +2,12 @@ import { describe, expect, it } from 'vitest';
 import { displayWords } from './edl';
 import {
   addClips,
+  addKey,
+  duckLevel,
+  keyLevel,
+  moveKey,
+  removeKey,
+  setLevel,
   clampFades,
   clipEntries,
   cutPoint,
@@ -236,5 +242,72 @@ describe('snapping', () => {
     // its end (at 3.2) is 0.2 from the playhead: nearer wins
     expect(snapMove(-0.8, 4, targets, 0.5)?.target.label).toBe('the playhead');
     expect(snapMove(6, 4, targets, 0.5)).toBeNull();
+  });
+});
+
+describe('volume keyframes', () => {
+  const bed = () => ({ clips: [clip('m', 'music', 20, { at: 0 })] });
+
+  it('splits a stretch in two at the same level, then lets one be turned down', () => {
+    let main = addKey(addKey(bed(), 'm', 5), 'm', 10);
+    expect(main.clips[0].keys).toEqual([5, 10]);
+    expect(main.clips[0].levels).toEqual([1, 1, 1]);
+    main = setLevel(main, 'm', 1, 0.4);
+    const c = layout(main)[0];
+    expect(keyLevel(2, c)).toBe(1);
+    expect(keyLevel(7.5, c)).toBe(0.4);
+    expect(keyLevel(15, c)).toBe(1);
+  });
+
+  it('eases across a keyframe: halfway at the key, gentle at both ends of the ramp', () => {
+    const c = layout(setLevel(addKey(bed(), 'm', 5), 'm', 1, 0))[0];
+    expect(keyLevel(4.5, c)).toBe(1);
+    expect(keyLevel(5, c)).toBeCloseTo(0.5);
+    expect(keyLevel(5.5, c)).toBeCloseTo(0);
+    // an S-curve: a tenth into the ramp it has moved far less than a tenth
+    expect(1 - keyLevel(4.6, c)).toBeLessThan(0.05);
+  });
+
+  it('refuses keyframes too close together, removes and moves them', () => {
+    let main = addKey(bed(), 'm', 5);
+    expect(addKey(main, 'm', 5.1)).toBe(main);
+    expect(addKey(main, 'm', 0.05)).toBe(main);
+    main = setLevel(addKey(main, 'm', 10), 'm', 1, 0.3);
+    expect(moveKey(main, 'm', 0, 12).clips[0].keys).toEqual([9.8, 10]);
+    const gone = removeKey(main, 'm', 1);
+    expect(gone.clips[0].keys).toEqual([5]);
+    expect(gone.clips[0].levels).toEqual([1, 0.3]);
+    expect(removeKey(gone, 'm', 0).clips[0].keys).toBeUndefined();
+  });
+
+  it('keeps keyframes with their piece when the clip is cut', () => {
+    const main = setLevel(addKey(addKey(bed(), 'm', 5), 'm', 15), 'm', 1, 0.5);
+    const r = splitClip(main, 'm', 8)!;
+    const [a, b] = r.main.clips;
+    expect([a.keys, a.levels]).toEqual([[5], [1, 0.5]]);
+    expect([b.keys, b.levels]).toEqual([[7], [0.5, 1]]);
+  });
+});
+
+describe('lowering music under voice', () => {
+  it('ducks while voice plays, easing down before and up after', () => {
+    const main = { clips: [clip('v', 'voiceover', 4, { gap: 3 }), clip('m', 'music', 12, { at: 0, duck: 0.3 })] };
+    const m = layout(main)[1];
+    expect(m.ducks).toEqual([[3, 7]]);
+    expect(duckLevel(1, m)).toBe(1);
+    expect(duckLevel(5, m)).toBeCloseTo(0.3);
+    expect(duckLevel(2.75, m)).toBeCloseTo(0.65); // halfway down the ramp
+    expect(duckLevel(8, m)).toBe(1);
+  });
+
+  it('stays down through a short pause between voice clips', () => {
+    const main = { clips: [clip('v', 'voiceover', 4), clip('w', 'interview', 4, { gap: 0.6 }), clip('m', 'music', 12, { at: 0, duck: 0.3 })] };
+    expect(layout(main)[2].ducks).toEqual([[0, 8.6]]);
+  });
+
+  it('is off unless set', () => {
+    const main = { clips: [clip('v', 'voiceover', 4), clip('m', 'music', 12, { at: 0 })] };
+    expect(layout(main)[1].ducks).toBeUndefined();
+    expect(duckLevel(2, layout(main)[1])).toBe(1);
   });
 });

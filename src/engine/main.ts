@@ -14,18 +14,74 @@ export const MAX_GAIN = 2;
 
 export const clipLength = (c: Pick<MainClip, 'segments'>) => outputDuration(c.segments);
 
-export type Placed = MainClip & { start: number; length: number };
+/** `ducks`: for a clip with `duck` set, the stretches (clip time) where voice plays under it. */
+export type Placed = MainClip & { start: number; length: number; ducks?: [number, number][] };
 
 /** Where every clip sits: speech in running order after its gap, music and effects at `at`. */
 export function layout(main: MainTimeline): Placed[] {
   let cursor = 0;
-  return main.clips.map((c) => {
+  const placed: Placed[] = main.clips.map((c) => {
     const length = clipLength(c);
     if (!isSpeech(c.kind)) return { ...c, start: Math.max(0, c.at), length };
     const start = cursor + Math.max(0, c.gap);
     cursor = start + length;
     return { ...c, start, length };
   });
+  const voice = placed.filter((c) => isSpeech(c.kind)).map((c) => [c.start, c.start + c.length] as [number, number]);
+  for (const c of placed) if (c.duck != null && !isSpeech(c.kind)) c.ducks = duckSpans(voice, c.start, c.length);
+  return placed;
+}
+
+/** How long a keyframe's change takes, centred on it, seconds (less if the stretches are short). */
+export const KEY_RAMP = 1;
+/** How long music takes to go down before voice, and back up after it, seconds. */
+export const DUCK_RAMP = 0.5;
+/** Keyframes closer than this to each other or to the clip's ends are refused. */
+export const MIN_KEY_GAP = 0.2;
+
+/** S-curve from 0 to 1: starts and ends gently, so a change in volume tapers in and out. */
+const ease = (x: number) => (1 - Math.cos(Math.PI * Math.max(0, Math.min(1, x)))) / 2;
+
+/**
+ * Voice stretches under a clip at main time `start`, in clip time. Pauses shorter than both ramps
+ * together are bridged, so the music doesn't pump up and down between two sentences.
+ */
+export function duckSpans(voice: [number, number][], start: number, length: number): [number, number][] {
+  const out: [number, number][] = [];
+  for (const [a, b] of [...voice].sort((x, y) => x[0] - y[0])) {
+    const lo = a - start;
+    const hi = b - start;
+    if (hi <= -DUCK_RAMP || lo >= length + DUCK_RAMP) continue;
+    const last = out.at(-1);
+    if (last && lo - last[1] < 2 * DUCK_RAMP) last[1] = Math.max(last[1], hi);
+    else out.push([lo, hi]);
+  }
+  return out;
+}
+
+/** Keyframe volume at clip time `t`: the stretch's level, eased across each keyframe. */
+export function keyLevel(t: number, c: Pick<MainClip, 'keys' | 'levels'> & { length: number }): number {
+  const keys = c.keys ?? [];
+  const levels = c.levels ?? [];
+  if (!keys.length || levels.length !== keys.length + 1) return 1;
+  for (let j = 0; j < keys.length; j++) {
+    const k = keys[j];
+    const r = Math.min(KEY_RAMP, k - (keys[j - 1] ?? 0), (keys[j + 1] ?? c.length) - k);
+    if (t < k - r / 2) return levels[j];
+    if (t <= k + r / 2) return levels[j] + (levels[j + 1] - levels[j]) * ease((t - (k - r / 2)) / r);
+  }
+  return levels[keys.length];
+}
+
+/** Lower-under-voice factor at clip time `t`: `duck` during voice, easing over DUCK_RAMP either side. */
+export function duckLevel(t: number, c: Pick<Placed, 'duck' | 'ducks'>): number {
+  if (c.duck == null || !c.ducks?.length) return 1;
+  let down = 0; // how far down, 0 to 1
+  for (const [a, b] of c.ducks) {
+    const d = t < a ? ease(1 - (a - t) / DUCK_RAMP) : t > b ? ease(1 - (t - b) / DUCK_RAMP) : 1;
+    down = Math.max(down, d);
+  }
+  return 1 - down * (1 - c.duck);
 }
 
 export const mainDuration = (placed: Placed[]) => placed.reduce((m, c) => Math.max(m, c.start + c.length), 0);
@@ -38,10 +94,16 @@ export function clampFades(length: number, fadeIn: number, fadeOut: number): [nu
   return [a * k, b * k];
 }
 
-/** Volume envelope at `t` seconds into a clip: its gain times an equal-power fade in and out. */
-export function fadeGain(t: number, c: Pick<Placed, 'length' | 'gain' | 'fadeIn' | 'fadeOut'>): number {
+/** The shape a clip's volume follows, without its fades: keyframes times lowering under voice. */
+export const envelope = (t: number, c: Pick<Placed, 'length' | 'keys' | 'levels' | 'duck' | 'ducks'>) => keyLevel(t, c) * duckLevel(t, c);
+
+/** True if the volume changes inside the clip (keyframes or lowering under voice), not only at its fades. */
+export const hasEnvelope = (c: Pick<Placed, 'keys' | 'duck' | 'ducks'>) => !!c.keys?.length || (c.duck != null && !!c.ducks?.length);
+
+/** Volume at `t` seconds into a clip: gain, keyframes and lowering under voice, times an equal-power fade in and out. */
+export function fadeGain(t: number, c: Pick<Placed, 'length' | 'gain' | 'fadeIn' | 'fadeOut' | 'keys' | 'levels' | 'duck' | 'ducks'>): number {
   const [fi, fo] = clampFades(c.length, c.fadeIn, c.fadeOut);
-  let g = c.gain;
+  let g = c.gain * envelope(t, c);
   if (fi > 0 && t < fi) g *= Math.sin((Math.max(0, t) / fi) * (Math.PI / 2));
   if (fo > 0 && t > c.length - fo) g *= Math.sin((Math.max(0, c.length - t) / fo) * (Math.PI / 2));
   return g;
@@ -263,7 +325,14 @@ export function splitClip(main: MainTimeline, id: string, t: number): { main: Ma
   };
   const base = c.name.replace(/ \d+$/, '');
   const n = Number(/ (\d+)$/.exec(c.name)?.[1] ?? 1);
-  const a: MainClip = { ...c, name: `${base} ${n}`, segments: first, words: c.words.filter(inFirst), fadeOut: 0 };
+  // keyframes go with their piece; both pieces keep the level that was playing at the cut
+  const keys = c.keys ?? [];
+  const levels = c.levels?.length === keys.length + 1 ? c.levels : keys.map(() => 1).concat(1);
+  const nLeft = keys.filter((k) => k < t).length;
+  const envA = keys.length ? { keys: keys.slice(0, nLeft), levels: levels.slice(0, nLeft + 1) } : {};
+  const right = keys.filter((k) => k > t);
+  const envB = keys.length ? { keys: right.map((k) => k - t), levels: levels.slice(keys.length - right.length) } : {};
+  const a: MainClip = { ...c, ...envA, name: `${base} ${n}`, segments: first, words: c.words.filter(inFirst), fadeOut: 0 };
   const b: MainClip = {
     ...c,
     id: newId('c'),
@@ -273,6 +342,7 @@ export function splitClip(main: MainTimeline, id: string, t: number): { main: Ma
     fadeIn: 0,
     gap: 0,
     at: c.at + t,
+    ...envB,
   };
   const clips = main.clips.flatMap((x) => (x.id === id ? [a, b] : [x]));
   return { main: { clips }, second: b.id };
@@ -304,4 +374,42 @@ export function snapMove(start: number, length: number, targets: SnapTarget[], t
       if (Math.abs(shift) <= tolerance && (!best || Math.abs(shift) < Math.abs(best.shift))) best = { shift, target };
     }
   return best;
+}
+
+/** Add a keyframe at clip time `t`; the stretch it splits keeps its level on both sides. Unchanged if too close to another or an end. */
+export function addKey(main: MainTimeline, id: string, t: number): MainTimeline {
+  const c = main.clips.find((x) => x.id === id);
+  if (!c) return main;
+  const keys = c.keys ?? [];
+  const levels = c.levels?.length === keys.length + 1 ? c.levels : keys.map(() => 1).concat(1);
+  if (t < MIN_KEY_GAP || t > clipLength(c) - MIN_KEY_GAP || keys.some((k) => Math.abs(k - t) < MIN_KEY_GAP)) return main;
+  const i = keys.filter((k) => k < t).length;
+  return updateClip(main, id, { keys: [...keys.slice(0, i), t, ...keys.slice(i)], levels: [...levels.slice(0, i + 1), levels[i], ...levels.slice(i + 1)] });
+}
+
+/** Remove keyframe `j`: the stretches either side join, at the level of the one before it. */
+export function removeKey(main: MainTimeline, id: string, j: number): MainTimeline {
+  const c = main.clips.find((x) => x.id === id);
+  const keys = c?.keys ?? [];
+  if (!c || j < 0 || j >= keys.length) return main;
+  const levels = c.levels ?? [];
+  const next = keys.filter((_, i) => i !== j);
+  return updateClip(main, id, next.length ? { keys: next, levels: levels.filter((_, i) => i !== j + 1) } : { keys: undefined, levels: undefined });
+}
+
+/** Move keyframe `j` to clip time `t`, kept between its neighbours. */
+export function moveKey(main: MainTimeline, id: string, j: number, t: number): MainTimeline {
+  const c = main.clips.find((x) => x.id === id);
+  const keys = c?.keys ?? [];
+  if (!c || j < 0 || j >= keys.length) return main;
+  const lo = (keys[j - 1] ?? 0) + MIN_KEY_GAP;
+  const hi = (keys[j + 1] ?? clipLength(c)) - MIN_KEY_GAP;
+  return updateClip(main, id, { keys: keys.map((k, i) => (i === j ? Math.max(lo, Math.min(hi, t)) : k)) });
+}
+
+/** Set the volume of stretch `i` (0 to 1). */
+export function setLevel(main: MainTimeline, id: string, i: number, level: number): MainTimeline {
+  const c = main.clips.find((x) => x.id === id);
+  if (!c?.levels || i < 0 || i >= c.levels.length) return main;
+  return updateClip(main, id, { levels: c.levels.map((l, k) => (k === i ? Math.max(0, Math.min(1, level)) : l)) });
 }

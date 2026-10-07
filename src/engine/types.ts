@@ -98,6 +98,14 @@ export type MainClip = {
   gap: number;
   /** Music and sound effects: where it starts on the main timeline, seconds. */
   at: number;
+  /**
+   * Volume keyframes: clip times (seconds, ascending) that split the clip into stretches, and the
+   * volume of each stretch (0 to 1, one more than `keys`). The volume eases from one to the next.
+   */
+  keys?: number[];
+  levels?: number[];
+  /** Music and sound effects: while a voice clip plays, turn down to this (0 to 1); unset = off. */
+  duck?: number;
 };
 
 /**

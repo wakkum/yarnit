@@ -115,6 +115,14 @@ export function fromSavedProject(data: unknown): SavedProject | null {
 const num = (x: unknown, fallback: number) => (typeof x === 'number' && Number.isFinite(x) ? x : fallback);
 
 /** The main timeline, dropping clips that can't play (no audio key, unknown kind, no spans). */
+/** Keyframes survive only as a matching pair of arrays with sane numbers. */
+function readKeys(c: MainClip): Pick<MainClip, 'keys' | 'levels'> {
+  const { keys, levels } = c;
+  if (!Array.isArray(keys) || !Array.isArray(levels) || !keys.length || levels.length !== keys.length + 1) return { keys: undefined, levels: undefined };
+  if (![...keys, ...levels].every((v) => typeof v === 'number' && Number.isFinite(v))) return { keys: undefined, levels: undefined };
+  return { keys: [...keys].sort((a, b) => a - b).map((k) => Math.max(0, k)), levels: levels.map((l) => Math.max(0, Math.min(1, l))) };
+}
+
 function readMain(data: unknown): MainTimeline {
   const clips = (data as Partial<MainTimeline>)?.clips;
   if (!Array.isArray(clips)) return { clips: [] };
@@ -135,6 +143,8 @@ function readMain(data: unknown): MainTimeline {
         fadeOut: Math.max(0, num(c.fadeOut, 0)),
         gap: Math.max(0, num(c.gap, 0)),
         at: Math.max(0, num(c.at, 0)),
+        ...readKeys(c),
+        duck: typeof c.duck === 'number' && Number.isFinite(c.duck) ? Math.max(0, Math.min(1, c.duck)) : undefined,
       })),
   };
 }

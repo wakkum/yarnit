@@ -4,7 +4,27 @@
 // selected clip's settings show under the lanes.
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { labelRows } from '../engine/parts';
-import { clampFades, cutPoint, EMPTY_MAIN, fadeGain, layout, mainDuration, MAX_FADE, MAX_GAIN, snapMove, snapTargets, updateClip, type Placed, type SnapTarget } from '../engine/main';
+import {
+  addKey,
+  clampFades,
+  cutPoint,
+  EMPTY_MAIN,
+  envelope,
+  fadeGain,
+  hasEnvelope,
+  layout,
+  mainDuration,
+  MAX_FADE,
+  MAX_GAIN,
+  moveKey,
+  removeKey,
+  setLevel,
+  snapMove,
+  snapTargets,
+  updateClip,
+  type Placed,
+  type SnapTarget,
+} from '../engine/main';
 import { isSpeech, RECORDING_KINDS, type MainTimeline as Main, type RecordingKind } from '../engine/types';
 import { editedPieces, tickStep, type ZoomView } from '../engine/view';
 import { mainOf } from '../state/mainSlice';
@@ -16,6 +36,8 @@ import { fmt, seconds, useMixPlayhead } from './util';
 import { Waveform } from './Waveform';
 
 const LANE_COLOR: Record<RecordingKind, string> = { interview: 'var(--sp1)', voiceover: 'var(--sp3)', music: 'var(--sp4)', sfx: 'var(--sp2)' };
+/** Lane order, top to bottom (user's choice, 7 Oct 2026). */
+const LANES: RecordingKind[] = ['voiceover', 'interview', 'music', 'sfx'];
 const DRAG_PX = 4;
 /** Height of one row of clips in a lane, px. */
 const ROW = 44;
@@ -24,7 +46,7 @@ const WHEEL_ZOOM = 0.006;
 const SNAP_PX = 8;
 
 /** A click (not a drag) on a clip: the menu at the pointer, for main-timeline time `t`. */
-type ClipMenu = { id: string; t: number; x: number; y: number };
+type ClipMenu = { id: string; t: number; x: number; y: number; span: number; width: number };
 const tenths = (t: number) => `${fmt(t)}.${Math.floor((t % 1) * 10 + 1e-6)}`;
 
 
@@ -166,7 +188,7 @@ export function MainTimeline() {
             </b>
           )}
         </div>
-        {RECORDING_KINDS.map((kind, i) => (
+        {LANES.map((kind, i) => (
           <div className="lane mlane" key={kind}>
             <div className="lane-head" style={{ borderLeftColor: LANE_COLOR[kind] }}>
               <b>
@@ -249,9 +271,48 @@ function Clip({
   const pieces = useMemo(() => editedPieces(c.segments).map((p) => ({ ...p, moved: false })), [c.segments]);
   const source = media.mainBuffers.get(c.trackId)?.duration ?? Math.max(...c.segments.map((s) => s.end));
   const [fi, fo] = clampFades(c.length, c.fadeIn, c.fadeOut);
-  const { length, gain, fadeIn, fadeOut } = c;
-  const level = useCallback((t: number) => fadeGain(t, { length, gain, fadeIn, fadeOut }), [length, gain, fadeIn, fadeOut]);
+  const level = useCallback((t: number) => fadeGain(t, c), [c]);
   const st = useStore.getState();
+  const env = hasEnvelope(c);
+  const keys = c.keys ?? [];
+  const [readout, setReadout] = useState<{ x: number; y: number; text: string } | null>(null);
+  const envLine = useMemo(() => {
+    if (!env) return '';
+    const n = 160;
+    return Array.from({ length: n + 1 }, (_, i) => `${(i / n) * 100},${(1 - envelope((i / n) * c.length, c)) * 100}`).join(' ');
+  }, [env, c]);
+
+  /** Drag a stretch's volume bar up or down, or a keyframe sideways; one undo step when let go. */
+  const dragEnv = (e: React.PointerEvent, what: { level: number } | { key: number }) => {
+    if (e.button !== 0) return;
+    e.stopPropagation();
+    e.preventDefault();
+    onMenu(null);
+    st.selectClip(c.id);
+    const box = (e.currentTarget as Element).closest('.mclip')!.getBoundingClientRect();
+    const before: Main = mainOf(useStore.getState());
+    let latest = before;
+    const onMove = (ev: PointerEvent) => {
+      if ('level' in what) {
+        const v = Math.round(Math.max(0, Math.min(1, 1 - (ev.clientY - box.top) / box.height)) * 100) / 100;
+        latest = setLevel(before, c.id, what.level, v);
+        setReadout({ x: ev.clientX - box.left, y: ev.clientY - box.top, text: `${Math.round(v * 100)}%` });
+      } else {
+        const t = ((ev.clientX - box.left) / box.width) * c.length;
+        latest = moveKey(before, c.id, what.key, t);
+        setReadout({ x: ev.clientX - box.left, y: 14, text: tenths(c.start + (latest.clips.find((x) => x.id === c.id)?.keys?.[what.key] ?? t)) });
+      }
+      st.previewMain(latest);
+    };
+    const onUp = () => {
+      window.removeEventListener('pointermove', onMove);
+      window.removeEventListener('pointerup', onUp);
+      setReadout(null);
+      if (latest !== before) st.commitMain(latest, before);
+    };
+    window.addEventListener('pointermove', onMove);
+    window.addEventListener('pointerup', onUp);
+  };
 
   /** Drag the clip (mode 'move') or one of its fade handles. */
   const drag = (e: React.PointerEvent, mode: 'move' | 'in' | 'out') => {
@@ -298,7 +359,8 @@ function Clip({
       onGuide(null);
       if (moved && latest !== before) st.commitMain(latest, before);
       // a click without a drag: offer to cut there
-      else if (!moved && mode === 'move') onMenu({ id: c.id, t: view.start + ((ev.clientX - box.left) / box.width) * view.span, x: ev.clientX, y: ev.clientY });
+      else if (!moved && mode === 'move')
+        onMenu({ id: c.id, t: view.start + ((ev.clientX - box.left) / box.width) * view.span, x: ev.clientX, y: ev.clientY, span: view.span, width: box.width });
     };
     window.addEventListener('pointermove', onMove);
     window.addEventListener('pointerup', onUp);
@@ -312,7 +374,47 @@ function Clip({
       title={`${c.name}: ${fmt(c.start)} to ${fmt(c.start + c.length)}, volume ${Math.round(c.gain * 100)}%. Drag to move, click to cut.`}
     >
       <Waveform peaks={peaks} color={color} source={source} length={c.length} pieces={pieces} level={level} />
-      {on && (
+      {c.ducks?.map(([a, b]) => (
+        <span key={a} className="duck-band" style={{ left: `${(Math.max(0, a) / c.length) * 100}%`, width: `${((Math.min(c.length, b) - Math.max(0, a)) / c.length) * 100}%` }} />
+      ))}
+      {env && (
+        <svg className="env-line" viewBox="0 0 100 100" preserveAspectRatio="none" aria-hidden>
+          <polyline points={envLine} />
+        </svg>
+      )}
+      {keys.length > 0 &&
+        (c.levels ?? []).map((l, i) => {
+          const a = keys[i - 1] ?? 0;
+          const b = keys[i] ?? c.length;
+          return (
+            <span
+              key={`bar${i}`}
+              className="level-bar"
+              style={{ left: `${(a / c.length) * 100}%`, width: `${((b - a) / c.length) * 100}%`, top: `${(1 - l) * 100}%` }}
+              onPointerDown={(e) => dragEnv(e, { level: i })}
+              title={`${Math.round(l * 100)}%. Drag up or down to change the volume here.`}
+            />
+          );
+        })}
+      {keys.map((k, j) => (
+        <span
+          key={`key${j}`}
+          className="keyframe"
+          style={{ left: `${(k / c.length) * 100}%`, top: `${(1 - envelope(k, c)) * 100}%` }}
+          onPointerDown={(e) => dragEnv(e, { key: j })}
+          onDoubleClick={(e) => {
+            e.stopPropagation();
+            st.commitMain(removeKey(mainOf(useStore.getState()), c.id, j));
+          }}
+          title="Keyframe: drag sideways to move it, double-click to remove it"
+        />
+      ))}
+      {readout && (
+        <span className="env-readout" style={{ left: readout.x, top: readout.y }}>
+          {readout.text}
+        </span>
+      )}
+      {on && !env && (
         <svg className="fades" viewBox="0 0 100 100" preserveAspectRatio="none" aria-hidden>
           <polyline points={`0,100 ${(fi / c.length) * 100},${100 - (c.gain / MAX_GAIN) * 100} ${100 - (fo / c.length) * 100},${100 - (c.gain / MAX_GAIN) * 100} 100,100`} />
         </svg>
@@ -387,6 +489,34 @@ function Inspector({ c }: { c: Placed }) {
       </label>
       {num('Fade in', c.fadeIn, Math.min(MAX_FADE, c.length), (v) => st.updateClip(c.id, { fadeIn: v }), 'Seconds to fade in from silence')}
       {num('Fade out', c.fadeOut, Math.min(MAX_FADE, c.length), (v) => st.updateClip(c.id, { fadeOut: v }), 'Seconds to fade out to silence')}
+      {!speech && (
+        <label className="insp-duck" title="Turn this clip down while a voice clip plays, and back up in between, with a short ease each way">
+          <input type="checkbox" checked={c.duck != null} onChange={(e) => st.updateClip(c.id, { duck: e.target.checked ? 0.35 : undefined })} />
+          Lower under voice
+          {c.duck != null && (
+            <>
+              {' to '}
+              <input
+                type="range"
+                min={0}
+                max={100}
+                step={5}
+                value={Math.round(c.duck * 100)}
+                onChange={(e) => live({ duck: Number(e.target.value) / 100 })}
+                onPointerUp={settle}
+                onKeyUp={settle}
+                onBlur={settle}
+              />
+              <span className="mono">{Math.round(c.duck * 100)}%</span>
+            </>
+          )}
+        </label>
+      )}
+      {!!c.keys?.length && (
+        <button onClick={() => st.updateClip(c.id, { keys: undefined, levels: undefined })} title="Remove every keyframe of this clip">
+          Clear keyframes ({c.keys.length})
+        </button>
+      )}
       {speech && num('Pause before', c.gap, 60, (v) => st.updateClip(c.id, { gap: v }), 'Silence before this clip, for example to let music play first')}
       {speech && (
         <>
@@ -412,6 +542,9 @@ function ClipMenuPop({ menu, c, close }: { menu: ClipMenu; c: Placed; close: () 
   const [pos, setPos] = useState({ left: menu.x + 8, top: menu.y + 8 });
   const cut = cutPoint(c, menu.t - c.start);
   const at = c.start + cut.t;
+  // a click on (or right next to) a keyframe offers to remove it instead of adding one
+  const perPx = menu.span / menu.width;
+  const nearKey = (c.keys ?? []).findIndex((k) => Math.abs(c.start + k - menu.t) < 6 * perPx);
   const st = useStore.getState();
 
   // keep it on screen, and close it on a click elsewhere, Esc, or scrolling
@@ -459,6 +592,17 @@ function ClipMenuPop({ menu, c, close }: { menu: ClipMenu; c: Placed; close: () 
         {cut.after && <span className="muted">, in the pause after “{cut.after}”</span>}
       </div>
       {item('✂ Cut here', () => st.cutClip(c.id, at), 'C')}
+      {nearKey >= 0
+        ? item('Remove keyframe', () => st.commitMain(removeKey(mainOf(useStore.getState()), c.id, nearKey)))
+        : item('◆ Add keyframe', () => {
+            const before = mainOf(useStore.getState());
+            const next = addKey(before, c.id, menu.t - c.start);
+            if (next === before) st.setNotice('Too close to another keyframe or the edge of the clip.');
+            else {
+              st.commitMain(next);
+              st.selectClip(c.id);
+            }
+          })}
       {item('▶ Play from here', () => {
         st.seekMain(at);
         if (!useStore.getState().playing) st.togglePlay();

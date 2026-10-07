@@ -1,7 +1,7 @@
 // Plays the main timeline live: every stretch of every clip is scheduled a second ahead on the
 // original AudioBuffers, through a gain node per clip that carries its volume and fades. The seam
 // fade and the envelope come from engine/main.ts, the same as the export render.
-import { clampFades, clipEntries, fadeGain, mainDuration, type Entry, type Placed } from '../engine/main';
+import { clampFades, clipEntries, fadeGain, mainDuration, type Entry, type Placed, hasEnvelope } from '../engine/main';
 import { FADE_SECONDS } from '../engine/render';
 
 const LOOKAHEAD = 1.0;
@@ -113,8 +113,12 @@ export class MixPlayer {
       const values = Float32Array.from({ length: n }, (_, i) => fadeGain(a + ((b - a) * i) / (n - 1) - c.start, c));
       g.gain.setValueCurveAtTime(values, toCtx(a), b - a);
     };
-    if (fi > 0 && fadeInEnd > from) curve(from, Math.min(fadeInEnd, end));
-    if (fo > 0) curve(Math.max(fadeOutStart, from, fadeInEnd), end);
+    // keyframes or lowering under voice change the volume anywhere in the clip: follow it all the way
+    if (hasEnvelope(c)) curve(from, end);
+    else {
+      if (fi > 0 && fadeInEnd > from) curve(from, Math.min(fadeInEnd, end));
+      if (fo > 0) curve(Math.max(fadeOutStart, from, fadeInEnd), end);
+    }
     return g;
   }
 
