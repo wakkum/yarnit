@@ -559,3 +559,8 @@ kbd { font: 12px ui-monospace, monospace; border: 1px solid var(--line); border-
 .mlane.big .mclip b { font-size: 12px; top: 3px; }
 .clip-words { position: absolute; left: 0; right: 0; bottom: 5px; height: 35px; z-index: 2; pointer-events: none; }
 .clip-words span { position: absolute; bottom: 0; overflow: hidden; white-space: nowrap; padding: 0 3px; border-radius: 3px; font-size: 11px; line-height: 17px; background: color-mix(in srgb, var(--panel) 82%, transparent); }
+
+/* playhead grip in the ruler: drag it, or anywhere on the ruler, to scrub */
+.scrub-ruler, .mruler { cursor: ew-resize; touch-action: none; }
+.scrub-grip { position: absolute; top: -1px; width: 12px; height: 15px; margin-left: -6px; z-index: 5; background: var(--accent); clip-path: polygon(0 0, 100% 0, 100% 60%, 50% 100%, 0 60%); border-radius: 2px 2px 0 0; cursor: grab; }
+.scrub-ruler:active .scrub-grip, .mruler:active .scrub-grip { cursor: grabbing; }

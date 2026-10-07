@@ -16,6 +16,7 @@ const STEPS: [string, ReactNode][] = [
 const KEYS: [string, ReactNode][] = [
   ['Play / pause', <><kbd>Space</kbd></>],
   ['Jump to a word', 'Click the word'],
+  ['Scrub', 'Drag the blue grip at the top of the playhead, or drag anywhere along the time ruler. Playback pauses while you drag and carries on from where you let go'],
   ['Jump to a moment', 'Click the waveform. It shows the edit as it plays: moved passages in orange, a red mark at each join. Show original opens the untouched recording underneath'],
   ['Zoom the waveform', <><kbd>+</kbd> / <kbd>−</kbd>, the buttons by the play button, or <kbd>{combo('mod')}</kbd> + scroll (trackpad: pinch). Scroll sideways to move along. The strip under the waveform shows the whole edit: drag its blue window, or its edges, and double-click it to fit</>],
   ['Select a range', <>Drag across the words, or <kbd>Shift</kbd> + click</>],

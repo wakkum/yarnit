@@ -46,6 +46,8 @@
 - [x] Main timeline: cut a clip in two anywhere (click menu or C), Premiere-style snapping across lanes (7 Oct 2026)
 - [x] Main timeline: volume keyframes with eased changes, Lower under voice for music and effects; lanes reordered to Voice-over, Interview, Music, Sound effect (7 Oct 2026)
 - [x] Main timeline: focus one clip (double-click, Z): zoomed, tall, words under the waveform (7 Oct 2026)
+- [x] Scrub grip on the playhead, both timelines (7 Oct 2026)
+- [ ] Scrub audio while dragging the playhead (short snippets), if wanted
 - [ ] Main timeline: trim a clip by dragging its edges
 - [ ] Main timeline: show which clips are out of date after their recording was edited, with a Replace option
 - [ ] Reorder recordings in the sidebar (drag)

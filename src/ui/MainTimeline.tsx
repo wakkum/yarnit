@@ -33,7 +33,7 @@ import { media } from '../state/media';
 import { useStore } from '../state/store';
 import { KIND_LABEL } from './kinds';
 import { KindIcon } from './Sidebar';
-import { fmt, seconds, useMixPlayhead } from './util';
+import { fmt, scrub, seconds, useMixPlayhead } from './util';
 import { Waveform } from './Waveform';
 
 const LANE_COLOR: Record<RecordingKind, string> = { interview: 'var(--sp1)', voiceover: 'var(--sp3)', music: 'var(--sp4)', sfx: 'var(--sp2)' };
@@ -78,6 +78,7 @@ export function MainTimeline() {
   const lanesRef = useRef<HTMLDivElement>(null);
   const clock = useRef<HTMLSpanElement>(null);
   const heads = useRef<(HTMLDivElement | null)[]>([]);
+  const grip = useRef<HTMLElement>(null);
   const pct = (t: number) => `${((t - view.start) / view.span) * 100}%`;
   const len = (d: number) => `${(d / view.span) * 100}%`;
 
@@ -92,6 +93,7 @@ export function MainTimeline() {
     const w = v ?? { start: 0, span: Math.max(total, 1) };
     const left = `${((t - w.start) / w.span) * 100}%`;
     for (const h of heads.current) if (h) h.style.left = left;
+    if (grip.current) grip.current.style.left = left;
   });
 
   // ⌘/Ctrl + wheel or pinch zooms around the pointer; sideways wheel pans (as on a recording)
@@ -191,7 +193,7 @@ export function MainTimeline() {
         </div>
       </div>
       <div ref={lanesRef}>
-        <div className="ruler mruler" onPointerDown={(e) => seekAt(e, view, seekMain)}>
+        <div className="ruler mruler" onPointerDown={(e) => scrub(e, e.currentTarget, view, total, seekMain)} title="Click or drag to move the playhead">
           {ticks.map((t) => (
             <span key={t} style={{ left: pct(t) }}>
               {fmt(t)}
@@ -202,6 +204,7 @@ export function MainTimeline() {
               Snaps to {guide.label}
             </b>
           )}
+          <i className="scrub-grip" ref={grip} aria-hidden />
         </div>
         {LANES.map((kind, i) => (
           <div className={`lane mlane${focused ? (kind === focused.kind ? ' big' : ' slim') : ''}`} key={kind}>

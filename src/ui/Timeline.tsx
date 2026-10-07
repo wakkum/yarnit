@@ -14,7 +14,7 @@ import { media, useStore } from '../state/store';
 import { combo } from './keys';
 import { PartsStrip } from './Parts';
 import { Waveform } from './Waveform';
-import { cutRegions, fmt, rangeLabel, trackColor, trackLabel, usePlayhead } from './util';
+import { cutRegions, fmt, rangeLabel, scrub, trackColor, trackLabel, usePlayhead } from './util';
 
 /** Music and sound effects: the colour of their sidebar icon. */
 const MUSIC_COLOR = 'var(--sp4)';
@@ -45,6 +45,7 @@ export function Timeline() {
   const clock = useRef<HTMLSpanElement>(null);
   const heads = useRef<(HTMLDivElement | null)[]>([]);
   const origHead = useRef<HTMLDivElement>(null);
+  const grip = useRef<HTMLElement>(null);
 
   const duration = recording.duration;
   const edited = outputDuration(recording.segments);
@@ -102,6 +103,7 @@ export function Timeline() {
     const w = v ?? { start: 0, span: Math.max(edited, 0.001) };
     const left = `${((Math.min(out, edited) - w.start) / w.span) * 100}%`;
     for (const h of heads.current) if (h) h.style.left = left;
+    if (grip.current) grip.current.style.left = left;
     if (origHead.current) origHead.current.style.left = source == null ? '-10px' : `${(source / duration) * 100}%`;
   });
 
@@ -173,12 +175,13 @@ export function Timeline() {
         </div>
       </div>
       <div ref={lanes}>
-      <div className="ruler">
+      <div className="ruler scrub-ruler" onPointerDown={(e) => scrub(e, e.currentTarget, view, edited, useStore.getState().seekOutput)} title="Click or drag to move the playhead">
         {ticks.map((t) => (
           <span key={t} style={{ left: pct(t) }}>
             {tickLabel(t, step)}
           </span>
         ))}
+        <i className="scrub-grip" ref={grip} aria-hidden />
       </div>
       {recording.tracks.map((track, i) => (
         <div className={`lane${music ? ' tall' : ''}`} key={track.id}>

@@ -1,7 +1,8 @@
 import { useEffect, useRef, useState } from 'react';
 import { outputToSource } from '../engine/edl';
 import type { Recording, Segment } from '../engine/types';
-import { media } from '../state/store';
+import { media, useStore } from '../state/store';
+import type { ZoomView } from '../engine/view';
 
 export const fmt = (s: number) => {
   const h = Math.floor(s / 3600);
@@ -92,4 +93,43 @@ export function useMixPlayhead(fn: (t: number) => void) {
     raf = requestAnimationFrame(tick);
     return () => cancelAnimationFrame(raf);
   }, []);
+}
+
+/**
+ * Drag the playhead along a ruler (pointer down on the ruler or its grip): seeks as the pointer moves.
+ * Playback pauses while dragging and carries on from where the grip is let go.
+ */
+export function scrub(e: React.PointerEvent, ruler: Element, view: ZoomView, total: number, seek: (t: number) => void) {
+  if (e.button !== 0) return;
+  e.preventDefault();
+  e.stopPropagation();
+  const st = useStore.getState();
+  const wasPlaying = st.playing;
+  if (wasPlaying) st.togglePlay();
+  // a ruler with no width (a hidden window) has no position to give; never seek to NaN
+  const at = (x: number) => {
+    const r = ruler.getBoundingClientRect();
+    return r.width > 0 ? Math.max(0, Math.min(total, view.start + ((x - r.left) / r.width) * view.span)) : null;
+  };
+  const go = (t: number | null) => t != null && seek(t);
+  go(at(e.clientX));
+  let frame = 0;
+  let x = e.clientX;
+  const onMove = (ev: PointerEvent) => {
+    x = ev.clientX;
+    // one seek per frame, however fast the pointer moves
+    frame ||= requestAnimationFrame(() => {
+      frame = 0;
+      go(at(x));
+    });
+  };
+  const onUp = () => {
+    window.removeEventListener('pointermove', onMove);
+    window.removeEventListener('pointerup', onUp);
+    cancelAnimationFrame(frame);
+    go(at(x));
+    if (wasPlaying) useStore.getState().togglePlay();
+  };
+  window.addEventListener('pointermove', onMove);
+  window.addEventListener('pointerup', onUp);
 }
