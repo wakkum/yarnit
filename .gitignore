@@ -40,3 +40,6 @@ test-audio/
 *.mp3
 *.m4a
 *.aiff
+
+# Claude preview config (local only)
+.claude/

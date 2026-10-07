@@ -11,7 +11,7 @@
 - [ ] Test on a real Windows machine (start.bat, shortcuts, export). Only verified on Mac with Windows labels simulated (5 Oct 2026)
 - [x] Ready for GitHub Pages: relative asset paths, deploy workflow (skipped while private), build tested from a `/yarnit/` subfolder incl. transcription and MP3 export (6 Oct 2026)
 - [x] Commit the review fixes, Pages workflow and main timeline (7 Oct 2026)
-- [ ] Decide on `.claude/launch.json` (commit or .gitignore)
+- [x] `.claude/` preview config kept local, in .gitignore (7 Oct 2026)
 - [ ] Make the repo public, then Settings > Pages > Source: GitHub Actions. Decide on a dedicated address (custom domain) so saved recordings are not shared with other `github.io` sites of the account
 
 ## Milestone 2: Reorder and search
