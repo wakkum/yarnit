@@ -918,7 +918,7 @@ export const useStore = create<State>((set, get) => ({
     await runExport(renderEdit(tracks, recording.segments, rate), rate, format, `${recording.name}-edited`);
   },
 
-  ...createMainSlice(set, get, { persistProject, flushSave, resetSession, fresh: FRESH, runExport }),
+  ...createMainSlice(set, get, { persistProject, flushSave, resetSession, fresh: FRESH, runExport, download }),
 }));
 
 /** Encode rendered audio in the export worker and download it as `name` plus the format's extension. */

@@ -4,6 +4,8 @@
 import { MixPlayer } from '../audio/mix';
 import { Player } from '../audio/player';
 import { decodeFile, resampled } from '../audio/decode';
+import { clock, docxFile, transcriptBlocks } from '../engine/docx';
+import { KIND_LABEL } from '../ui/kinds';
 import { displayWords, retypeWord } from '../engine/edl';
 import { passages, wordColors } from '../engine/highlights';
 import {
@@ -77,6 +79,8 @@ export type MainSlice = {
   mainUndo: () => void;
   mainRedo: () => void;
   exportMain: (format: 'wav' | 'mp3') => Promise<void>;
+  /** The voice clips' transcript, in running order, as a Word document. */
+  exportMainTranscript: () => void;
 };
 
 type Helpers = {
@@ -85,6 +89,7 @@ type Helpers = {
   resetSession: (set: (p: Partial<State>) => void) => Player;
   fresh: Partial<State>;
   runExport: (channels: Float32Array[], sampleRate: number, format: 'wav' | 'mp3', name: string) => Promise<void>;
+  download: (blob: Blob, name: string) => void;
 };
 
 export const mainOf = (s: Pick<State, 'project'>) => s.project?.main ?? EMPTY_MAIN;
@@ -345,6 +350,18 @@ export function createMainSlice(set: (p: Partial<State>) => void, get: () => Sta
       const audio = new Map<string, Float32Array[]>();
       for (const [id, b] of media.mainBuffers) audio.set(id, await resampled(b, rate));
       await h.runExport(renderMix(main, audio, rate), rate, format, get().project?.name ?? 'Main timeline');
+    },
+
+    exportMainTranscript() {
+      const main = mainOf(get());
+      const blocks = transcriptBlocks(main, (k) => KIND_LABEL[k]);
+      if (!blocks.length) return get().setNotice('No voice clips with words on the main timeline yet.');
+      const name = get().project?.name ?? 'Main timeline';
+      const length = mainDuration(layout(main));
+      const date = new Date().toLocaleDateString(undefined, { day: 'numeric', month: 'long', year: 'numeric' });
+      const file = docxFile(name, `Main timeline transcript · ${clock(length)} · exported ${date}`, blocks);
+      h.download(new Blob([file as BlobPart], { type: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document' }), `${name}-transcript.docx`);
+      set({ message: 'Transcript exported' });
     },
   };
 }

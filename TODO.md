@@ -45,6 +45,7 @@
 - [ ] Main timeline: anchor a music or effect clip to a speech clip so it moves when speech before it is cut
 - [x] Main timeline: cut a clip in two anywhere (click menu or C), Premiere-style snapping across lanes (7 Oct 2026)
 - [x] Keyframes Premiere style: each its own volume, dragged up, down and sideways; old saves converted (7 Oct 2026)
+- [x] Export the main timeline transcript as a Word document (7 Oct 2026)
 - [x] Double-click a word to correct it; Help entry for yt-dlp (7 Oct 2026)
 - [x] Rename speakers on the main timeline (7 Oct 2026)
 - [x] Several big lanes at once: S M L lane sizes (mockup A, buttons only); overview strip on the main timeline (7 Oct 2026)

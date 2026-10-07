@@ -10,7 +10,7 @@ const STEPS: [string, ReactNode][] = [
   ['Wait for the transcript', 'It is made on this computer. The first time, the speech model downloads once.'],
   ['Edit the text', <>Select words and press <kbd>Delete</kbd>. They are cut from the audio too.</>],
   ['Build the final version', <>Use <b>Send to main</b> on each recording (the whole edit, the selected words, a highlight colour or a part), then open <b>Main timeline</b> in the sidebar to arrange them.</>],
-  ['Export', <>Play it back to check, then <b>Export</b> as MP3 or WAV. On the main timeline, Export mixes every lane into one file.</>],
+  ['Export', <>Play it back to check, then <b>Export</b> as MP3 or WAV. On the main timeline, Export mixes every lane into one file, or saves the transcript of every voice clip as a Word document (<b>Transcript</b>).</>],
 ];
 
 const KEYS: [string, ReactNode][] = [

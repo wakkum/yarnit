@@ -118,7 +118,7 @@ export function TopBar() {
               className="primary"
               onClick={() => setMenu(!menu)}
               disabled={busy || (mainOpen && mainEmpty)}
-              title={mainOpen ? 'Mix every lane into one audio file' : undefined}
+              title={mainOpen ? 'Mix every lane into one audio file, or export the transcript' : undefined}
             >
               Export
             </button>
@@ -142,6 +142,17 @@ export function TopBar() {
                 >
                   WAV <small>16-bit, full quality</small>
                 </button>
+                {mainOpen && (
+                  <button
+                    role="menuitem"
+                    onClick={() => {
+                      setMenu(false);
+                      useStore.getState().exportMainTranscript();
+                    }}
+                  >
+                    Transcript <small>Word document (.docx)</small>
+                  </button>
+                )}
               </div>
             )}
           </div>
