@@ -44,6 +44,9 @@
 - [x] Send all parts of a recording to main at once (7 Oct 2026)
 - [ ] Main timeline: anchor a music or effect clip to a speech clip so it moves when speech before it is cut
 - [x] Main timeline: cut a clip in two anywhere (click menu or C), Premiere-style snapping across lanes (7 Oct 2026)
+- [x] Keyframes Premiere style: each its own volume, dragged up, down and sideways; old saves converted (7 Oct 2026)
+- [x] Rename speakers on the main timeline (7 Oct 2026)
+- [x] Several big lanes at once: S M L lane sizes (mockup A, buttons only); overview strip on the main timeline (7 Oct 2026)
 - [x] Main timeline: volume keyframes with eased changes, Lower under voice for music and effects; lanes reordered to Voice-over, Interview, Music, Sound effect (7 Oct 2026)
 - [x] Main timeline: focus one clip (double-click, Z): zoomed, tall, words under the waveform (7 Oct 2026)
 - [x] Scrub grip on the playhead, both timelines (7 Oct 2026)

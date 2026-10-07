@@ -9,7 +9,7 @@ import { useEffect, useLayoutEffect, useMemo, useRef } from 'react';
 import { outputDuration, outputToSourceAt } from '../engine/edl';
 import { labelRows, setPartEdge } from '../engine/parts';
 import { isSpeech, type Part } from '../engine/types';
-import { editedPieces, movedPassages, tickStep, toOutputSpans, type Piece, type ZoomView } from '../engine/view';
+import { editedPieces, movedPassages, tickStep, toOutputSpans, type ZoomView } from '../engine/view';
 import { media, useStore } from '../state/store';
 import { combo } from './keys';
 import { PartsStrip } from './Parts';
@@ -101,9 +101,14 @@ export function Timeline() {
     // while playing, page the view along so the playhead never runs off
     if (v && st.playing && (out < v.start || out > v.start + v.span)) st.setZoom({ start: out - v.span * 0.05, span: v.span });
     const w = v ?? { start: 0, span: Math.max(edited, 0.001) };
-    const left = `${((Math.min(out, edited) - w.start) / w.span) * 100}%`;
+    const T = Math.min(out, edited);
+    const left = `${((T - w.start) / w.span) * 100}%`;
     for (const h of heads.current) if (h) h.style.left = left;
-    if (grip.current) grip.current.style.left = left;
+    // the grip sits in the ruler: hidden while the playhead is outside the view, or it would hang over the sidebar
+    if (grip.current) {
+      grip.current.style.left = left;
+      grip.current.style.visibility = T >= w.start && T <= w.start + w.span ? '' : 'hidden';
+    }
     if (origHead.current) origHead.current.style.left = source == null ? '-10px' : `${(source / duration) * 100}%`;
   });
 
@@ -121,7 +126,7 @@ export function Timeline() {
   return (
     <section className="timeline">
       <div className="transport">
-        <button className="play" onClick={togglePlay} aria-label={playing ? 'Pause' : 'Play'} title="Play/pause (Space)">
+        <button className="play" onClick={togglePlay} disabled={phase === 'decoding'} aria-label={playing ? 'Pause' : 'Play'} title="Play/pause (Space)">
           {playing ? '❚❚' : '▶'}
         </button>
         {/* written every frame by usePlayhead, so React must not own its text */}
@@ -231,7 +236,9 @@ export function Timeline() {
         </div>
       ))}
       </div>
-      <Overview pieces={pieces} edited={edited} duration={duration} peaks={peaks[recording.tracks[0].id]} view={zoom} />
+      <Overview length={edited} view={zoom} title="The whole edit. Drag the window to move, its edges to zoom; double-click to fit.">
+        <Waveform peaks={peaks[recording.tracks[0].id]} color="var(--muted)" source={duration} length={edited} pieces={pieces} />
+      </Overview>
       <div className="orig">
         <button className="ghost orig-toggle" onClick={() => setSettings({ showOriginal: !showOriginal })} aria-expanded={showOriginal}>
           {showOriginal ? 'Hide original ▾' : 'Show original ▸'}
@@ -372,10 +379,11 @@ function PartRegion({ part, left, width, row, view }: { part: Part & { outStart:
 }
 
 /**
- * The whole edit as a thin strip, with a window showing what the lanes show. Drag the window to pan,
- * drag its edges to zoom, click elsewhere to centre it there, double-click to fit.
+ * The whole edit (`length` seconds, drawn by `children`) as a thin strip, with a window showing what the
+ * lanes show. Drag the window to pan, drag its edges to zoom, click elsewhere to centre it there,
+ * double-click to fit. Used by a recording and the main timeline.
  */
-function Overview({ pieces, edited, duration, peaks, view }: { pieces: Piece[]; edited: number; duration: number; peaks: Float32Array | undefined; view: ZoomView | null }) {
+export function Overview({ length: edited, view, title, children }: { length: number; view: ZoomView | null; title: string; children: React.ReactNode }) {
   const ref = useRef<HTMLDivElement>(null);
   const v = view ?? { start: 0, span: edited };
   const pct = (t: number) => `${(t / Math.max(edited, 0.001)) * 100}%`;
@@ -409,7 +417,7 @@ function Overview({ pieces, edited, duration, peaks, view }: { pieces: Piece[]; 
     <div
       className="overview"
       ref={ref}
-      title="The whole edit. Drag the window to move, its edges to zoom; double-click to fit."
+      title={title}
       onPointerDown={(e) => {
         // click outside the window: centre the window there, then keep dragging it
         const r = e.currentTarget.getBoundingClientRect();
@@ -418,7 +426,7 @@ function Overview({ pieces, edited, duration, peaks, view }: { pieces: Piece[]; 
       }}
       onDoubleClick={() => useStore.getState().setZoom(null)}
     >
-      <Waveform peaks={peaks} color="var(--muted)" source={duration} length={edited} pieces={pieces} />
+      {children}
       <div className="dim" style={{ left: 0, width: pct(v.start) }} />
       <div className="dim" style={{ left: pct(v.start + v.span), right: 0 }} />
       <div className="win" style={{ left: pct(v.start), width: pct(v.span) }} onPointerDown={(e) => startDrag(e, 'move')}>

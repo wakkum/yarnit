@@ -480,6 +480,20 @@ export const useStore = create<State>((set, get) => ({
       if (!saved) throw new Error('it was saved by a newer version of Yarnit, or is damaged');
       let { recording } = saved;
       const track = recording.tracks[0];
+      let restart = false;
+      if (running?.id === id) recording = { ...recording, words: running.words };
+      else if (!saved.transcribed && isSpeech(recording.kind)) {
+        // unfinished transcript: it starts over (edits made meanwhile only touched segments, which stay)
+        recording = { ...recording, words: [] };
+        restart = true;
+      }
+      // the transcript shows at once; the audio (slow for a long file) follows. Until then nothing may
+      // snap to, or play, the previous recording's audio.
+      media.buffers = new Map();
+      media.mono16k = null;
+      player.setTracks([]);
+      player.setSegments(recording.segments);
+      set({ recording, transcribed: saved.transcribed, saveStatus: 'saving', phase: 'decoding', message: 'Loading the audio' });
       let decoded = handoff?.trackId === track.id ? handoff.buffer : null;
       handoff = null;
       if (!decoded) {
@@ -490,17 +504,11 @@ export const useStore = create<State>((set, get) => ({
       const audio = await prepareAudio(decoded);
       if (opening !== id || get().mainOpen) return; // another recording, or the main timeline, was clicked meanwhile
       attachAudio(audio, track.id, set);
-      player.setSegments(recording.segments);
-      let restart = false;
-      if (running?.id === id) recording = { ...recording, words: running.words };
-      else if (!saved.transcribed && isSpeech(recording.kind)) {
-        // unfinished transcript: it starts over (edits made meanwhile only touched segments, which stay)
-        recording = { ...recording, words: [] };
-        restart = true;
-      }
+      // edits made while the audio loaded are in the store, not in `recording`
+      player.setSegments(get().recording?.segments ?? recording.segments);
       const t = get().transcribing;
       const phase = t?.id === id ? (t.stage === 'download' ? 'downloading' : 'transcribing') : 'ready';
-      set({ recording, transcribed: saved.transcribed, saveStatus: 'saving', phase, message: phase === 'ready' ? '' : 'Transcribing' });
+      set({ phase, message: phase === 'ready' ? '' : 'Transcribing' });
       // only once it is the open recording, so the queue uses the audio in memory instead of decoding it again
       if (restart) enqueueOpen(id);
       const project = get().project;
@@ -644,7 +652,7 @@ export const useStore = create<State>((set, get) => ({
       return;
     }
     const p = media.player;
-    if (!p) return;
+    if (!p || !media.buffers.size) return; // the audio is still loading
     if (p.playing) p.pause();
     else void p.play();
     set({ playing: !get().playing, playingPart: null });
@@ -681,7 +689,7 @@ export const useStore = create<State>((set, get) => ({
 
   playRange(start, end, partId) {
     const p = media.player;
-    if (!p || end <= start) return;
+    if (!p || !media.buffers.size || end <= start) return;
     void p.play(start, end);
     set({ playing: true, playingPart: partId ?? null });
   },
@@ -890,11 +898,13 @@ export const useStore = create<State>((set, get) => ({
 
   async exportAudio(format) {
     const { recording } = get();
-    if (!recording) return;
+    if (!recording || !media.buffers.has(recording.tracks[0].id)) return; // the audio is still loading
     set({ phase: 'exporting', progress: 0, message: `Exporting ${format.toUpperCase()}` });
     const tracks = recording.tracks.map((t) => ({ channels: channelsOf(media.buffers.get(t.id)!), offset: t.offset }));
+    // the rate the audio was decoded at (its own since 7 Oct; older saves say the player's 48 kHz)
+    const rate = media.buffers.get(recording.tracks[0].id)!.sampleRate;
     // names have no extension since 6 Oct, so a dot in one ("Ep. 3") is part of the name
-    await runExport(renderEdit(tracks, recording.segments, recording.sampleRate), recording.sampleRate, format, `${recording.name}-edited`);
+    await runExport(renderEdit(tracks, recording.segments, rate), rate, format, `${recording.name}-edited`);
   },
 
   ...createMainSlice(set, get, { persistProject, flushSave, resetSession, fresh: FRESH, runExport }),

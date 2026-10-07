@@ -18,21 +18,22 @@ import {
   moveKey,
   placeSpeech,
   removeKey,
-  setLevel,
+  keysAround,
+  shiftLevels,
   snapMove,
   snapTargets,
   updateClip,
   type Placed,
   type SnapTarget,
-  wordTimes,
 } from '../engine/main';
-import { isSpeech, RECORDING_KINDS, type MainTimeline as Main, type RecordingKind } from '../engine/types';
+import { isSpeech, LANE_SIZES, RECORDING_KINDS, type LaneSize, type MainTimeline as Main, type RecordingKind } from '../engine/types';
 import { editedPieces, tickStep, type ZoomView } from '../engine/view';
 import { mainOf } from '../state/mainSlice';
 import { media } from '../state/media';
 import { useStore } from '../state/store';
 import { KIND_LABEL } from './kinds';
 import { KindIcon } from './Sidebar';
+import { Overview } from './Timeline';
 import { fmt, scrub, seconds, useMixPlayhead } from './util';
 import { Waveform } from './Waveform';
 
@@ -40,10 +41,9 @@ const LANE_COLOR: Record<RecordingKind, string> = { interview: 'var(--sp1)', voi
 /** Lane order, top to bottom (user's choice, 7 Oct 2026). */
 const LANES: RecordingKind[] = ['voiceover', 'interview', 'music', 'sfx'];
 const DRAG_PX = 4;
-/** Height of one row of clips in a lane, px: normal, the focused clip's lane, the other lanes while focused. */
-const ROW = 44;
-const BIG_ROW = 190;
-const SLIM_ROW = 16;
+/** Height of one row of clips in a lane, px, per lane size (S M L in the lane header). */
+const ROW: Record<LaneSize, number> = { S: 44, M: 100, L: 190 };
+const SIZE_NAME: Record<LaneSize, string> = { S: 'Small', M: 'Medium', L: 'Large' };
 const WHEEL_ZOOM = 0.006;
 /** How close, in px, a dragged edge must come to snap. */
 const SNAP_PX = 8;
@@ -91,9 +91,14 @@ export function MainTimeline() {
     const v = st.zoom;
     if (v && st.playing && (t < v.start || t > v.start + v.span)) st.setZoom({ start: t - v.span * 0.05, span: v.span });
     const w = v ?? { start: 0, span: Math.max(total, 1) };
-    const left = `${((t - w.start) / w.span) * 100}%`;
+    const T = t;
+    const left = `${((T - w.start) / w.span) * 100}%`;
     for (const h of heads.current) if (h) h.style.left = left;
-    if (grip.current) grip.current.style.left = left;
+    // the grip sits in the ruler: hidden while the playhead is outside the view, or it would hang over the sidebar
+    if (grip.current) {
+      grip.current.style.left = left;
+      grip.current.style.visibility = T >= w.start && T <= w.start + w.span ? '' : 'hidden';
+    }
   });
 
   // ⌘/Ctrl + wheel or pinch zooms around the pointer; sideways wheel pans (as on a recording)
@@ -122,8 +127,11 @@ export function MainTimeline() {
 
   const working = phase === 'decoding' || phase === 'exporting';
   const focused = focus ? placed.find((c) => c.id === focus.id) : undefined;
-  const rowH = (kind: RecordingKind) => (!focused ? ROW : kind === focused.kind ? BIG_ROW : SLIM_ROW);
+  const laneSizes = useStore((s) => s.project?.laneSizes);
+  const sizeOf = (kind: RecordingKind) => laneSizes?.[kind] ?? 'S';
+  const rowH = (kind: RecordingKind) => ROW[sizeOf(kind)];
   const counts = Object.fromEntries(RECORDING_KINDS.map((k) => [k, placed.filter((c) => c.kind === k).length])) as Record<RecordingKind, number>;
+  const used = LANES.filter((k) => counts[k] > 0);
   // clips that overlap in one lane (music under music) stack in rows, so none hides another
   const rows = useMemo(
     () =>
@@ -207,12 +215,25 @@ export function MainTimeline() {
           <i className="scrub-grip" ref={grip} aria-hidden />
         </div>
         {LANES.map((kind, i) => (
-          <div className={`lane mlane${focused ? (kind === focused.kind ? ' big' : ' slim') : ''}`} key={kind}>
+          <div className={`lane mlane size-${sizeOf(kind)}`} key={kind}>
             <div className="lane-head" style={{ borderLeftColor: LANE_COLOR[kind] }}>
               <b>
                 <KindIcon kind={kind} /> {KIND_LABEL[kind]}
               </b>
               <span className="muted">{counts[kind] ? `${counts[kind]} clip${counts[kind] === 1 ? '' : 's'}` : isSpeech(kind) ? 'plays in turn' : 'plays under voice'}</span>
+              <span className="lane-size" role="group" aria-label={`${KIND_LABEL[kind]} lane height`}>
+                {LANE_SIZES.map((z) => (
+                  <button
+                    key={z}
+                    className={sizeOf(kind) === z ? 'on' : ''}
+                    aria-pressed={sizeOf(kind) === z}
+                    onClick={() => useStore.getState().setLaneSize(kind, z)}
+                    title={`${SIZE_NAME[z]} lane`}
+                  >
+                    {z}
+                  </button>
+                ))}
+              </span>
             </div>
             <div
               className="lane-body mlane-body"
@@ -233,7 +254,6 @@ export function MainTimeline() {
                     width={len(c.length)}
                     top={3 + rowH(kind) * (rows[kind].row.get(c.id) ?? 0)}
                     height={rowH(kind) - 4}
-                    words={c.id === focused?.id && isSpeech(c.kind)}
                     view={view}
                     on={c.id === selected}
                     peaks={peaks[c.trackId]}
@@ -250,6 +270,24 @@ export function MainTimeline() {
           </div>
         ))}
       </div>
+      {placed.length > 0 && (
+        <Overview length={Math.max(total, 1)} view={zoom} title="The whole main timeline. Drag the window to move, its edges to zoom; double-click to fit.">
+          {/* every clip as a bar in its lane's colour, one row per lane that has clips */}
+          {placed.map((c) => (
+            <span
+              key={c.id}
+              className="ov-clip"
+              style={{
+                left: `${(c.start / Math.max(total, 1)) * 100}%`,
+                width: `${(c.length / Math.max(total, 1)) * 100}%`,
+                top: `${(used.indexOf(c.kind) / used.length) * 100}%`,
+                height: `${100 / used.length}%`,
+                background: LANE_COLOR[c.kind],
+              }}
+            />
+          ))}
+        </Overview>
+      )}
       {menu && placed.some((c) => c.id === menu.id) && <ClipMenuPop menu={menu} c={placed.find((c) => c.id === menu.id)!} close={() => setMenu(null)} />}
       {selected && placed.some((c) => c.id === selected) && <Inspector key={`${selected}:${placed.find((c) => c.id === selected)!.name}`} c={placed.find((c) => c.id === selected)!} />}
     </section>
@@ -275,7 +313,6 @@ function Clip({
   onGuide,
   onMenu,
   height,
-  words,
 }: {
   c: Placed;
   left: string;
@@ -290,8 +327,6 @@ function Clip({
   onGuide: (g: SnapTarget | null) => void;
   onMenu: (m: ClipMenu | null) => void;
   height: number;
-  /** Write the clip's words under its waveform (the focused voice clip). */
-  words: boolean;
 }) {
   const pieces = useMemo(() => editedPieces(c.segments).map((p) => ({ ...p, moved: false })), [c.segments]);
   const source = media.mainBuffers.get(c.trackId)?.duration ?? Math.max(...c.segments.map((s) => s.end));
@@ -310,8 +345,11 @@ function Clip({
     return Array.from({ length: n + 1 }, (_, i) => `${(i / n) * 100},${(1 - fadeGain((i / n) * c.length, c) / MAX_GAIN) * 100}`).join(' ');
   }, [showLine, c]);
 
-  /** Drag the volume line up or down (a stretch, or the whole clip without keyframes), or a keyframe sideways. */
-  const dragEnv = (e: React.PointerEvent, what: { level: number } | { gain: true } | { key: number }) => {
+  /**
+   * Drag the volume line up or down (the keyframes either side of a stretch, or the whole clip without
+   * keyframes), or a keyframe anywhere: sideways moves it, up and down sets its volume (Shift: volume only).
+   */
+  const dragEnv = (e: React.PointerEvent, what: { stretch: number[] } | { gain: true } | { key: number }) => {
     if (e.button !== 0) return;
     e.stopPropagation();
     e.preventDefault();
@@ -319,17 +357,32 @@ function Clip({
     st.selectClip(c.id);
     const box = (e.currentTarget as Element).closest('.mclip')!.getBoundingClientRect();
     const before: Main = mainOf(useStore.getState());
+    const levels = c.levels ?? [];
+    // the volume the pointer points at, in steps of 5%
+    const volumeAt = (y: number) => Math.round(Math.max(0, Math.min(1, 1 - (y - box.top) / box.height)) * MAX_GAIN * 20) / 20;
+    const y0 = e.clientY;
     let latest = before;
     const onMove = (ev: PointerEvent) => {
-      if ('level' in what || 'gain' in what) {
-        // the volume the pointer points at, in steps of 5%
-        const v = Math.round(Math.max(0, Math.min(1, 1 - (ev.clientY - box.top) / box.height)) * MAX_GAIN * 20) / 20;
-        latest = 'gain' in what ? updateClip(before, c.id, { gain: v }) : setLevel(before, c.id, what.level, c.gain > 0 ? v / c.gain : 0);
-        setReadout({ x: ev.clientX - box.left, y: ev.clientY - box.top, text: `${Math.round(v * 100)}%` });
+      const x = ev.clientX - box.left;
+      const y = ev.clientY - box.top;
+      if ('gain' in what) {
+        const v = volumeAt(ev.clientY);
+        latest = updateClip(before, c.id, { gain: v });
+        setReadout({ x, y, text: `${Math.round(v * 100)}%` });
+      } else if ('stretch' in what) {
+        // the keyframes move together, by the distance dragged; the first one lands on a 5% step
+        const first = what.stretch[0];
+        const v = Math.round((c.gain * levels[first] - ((ev.clientY - y0) / box.height) * MAX_GAIN) * 20) / 20;
+        latest = c.gain > 0 ? shiftLevels(before, c.id, what.stretch, Math.max(0, v) / c.gain - levels[first]) : before;
+        const now = latest.clips.find((k) => k.id === c.id)?.levels ?? levels;
+        setReadout({ x, y, text: what.stretch.map((j) => `${Math.round(c.gain * now[j] * 100)}%`).join(' to ') });
       } else {
-        const t = ((ev.clientX - box.left) / box.width) * c.length;
-        latest = moveKey(before, c.id, what.key, t);
-        setReadout({ x: ev.clientX - box.left, y: 14, text: tenths(c.start + (latest.clips.find((x) => x.id === c.id)?.keys?.[what.key] ?? t)) });
+        const j = what.key;
+        let next = ev.shiftKey ? before : moveKey(before, c.id, j, (x / box.width) * c.length);
+        if (c.gain > 0) next = shiftLevels(next, c.id, [j], volumeAt(ev.clientY) / c.gain - levels[j]);
+        latest = next;
+        const k = latest.clips.find((k) => k.id === c.id);
+        setReadout({ x, y, text: `${Math.round(c.gain * (k?.levels?.[j] ?? 1) * 100)}% at ${tenths(c.start + (k?.keys?.[j] ?? 0))}` });
       }
       st.previewMain(latest);
     };
@@ -426,16 +479,21 @@ function Clip({
         />
       )}
       {keys.length > 0 &&
-        (c.levels ?? []).map((l, i) => {
+        Array.from({ length: keys.length + 1 }, (_, i) => {
           const a = keys[i - 1] ?? 0;
           const b = keys[i] ?? c.length;
+          const js = keysAround(c, (a + b) / 2);
+          const [la, lb] = [c.levels?.[js[0]] ?? 1, c.levels?.[js.at(-1)!] ?? 1];
+          // a sloped stretch: grab it around its middle, where the line passes halfway
+          const inset = la === lb ? 0 : (b - a) * 0.3;
+          if (b - a < 0.01) return null;
           return (
             <span
               key={`bar${i}`}
               className="level-bar"
-              style={{ left: `${(a / c.length) * 100}%`, width: `${((b - a) / c.length) * 100}%`, top: `${yOf(c.gain * l)}%` }}
-              onPointerDown={(e) => dragEnv(e, { level: i })}
-              title={`${Math.round(c.gain * l * 100)}%. Drag the line up or down to change the volume here.`}
+              style={{ left: `${((a + inset) / c.length) * 100}%`, width: `${((b - a - 2 * inset) / c.length) * 100}%`, top: `${yOf((c.gain * (la + lb)) / 2)}%` }}
+              onPointerDown={(e) => dragEnv(e, { stretch: js })}
+              title="Drag the line up or down: the keyframes either side move with it"
             />
           );
         })}
@@ -449,7 +507,7 @@ function Clip({
             e.stopPropagation();
             st.commitMain(removeKey(mainOf(useStore.getState()), c.id, j));
           }}
-          title="Keyframe: drag sideways to move it, double-click to remove it"
+          title={`Keyframe, ${Math.round(c.gain * (c.levels?.[j] ?? 1) * 100)}%: drag up or down for its volume, sideways to move it (Shift: volume only). Double-click removes it.`}
         />
       ))}
       {readout && (
@@ -458,7 +516,6 @@ function Clip({
         </span>
       )}
       <b>{c.name}</b>
-      {words && <ClipWords c={c} />}
       {cutAt != null && <span className="cut-mark" style={{ left: `${(cutAt / c.length) * 100}%` }} />}
       {on && (
         <>
@@ -653,25 +710,6 @@ function ClipMenuPop({ menu, c, close }: { menu: ClipMenu; c: Placed; close: () 
         st.selectClip(c.id);
         requestAnimationFrame(() => document.querySelector<HTMLInputElement>('.inspector .insp-vol input')?.focus());
       })}
-    </div>
-  );
-}
-
-/** The focused voice clip's words, each written at the moment it is spoken, under the waveform. */
-function ClipWords({ c }: { c: Placed }) {
-  const words = useMemo(() => wordTimes([{ ...c, start: 0 }]), [c]);
-  const text = useMemo(() => new Map(c.words.map((w) => [w.id, w.text])), [c.words]);
-  return (
-    <div className="clip-words" aria-hidden>
-      {words.map((w, i) => (
-        <span
-          key={w.id}
-          // two staggered rows: each word has room up to the one after next
-          style={{ left: `${(w.at / c.length) * 100}%`, bottom: i % 2 ? 18 : 0, maxWidth: `${(((words[i + 2]?.at ?? c.length) - w.at) / c.length) * 100}%` }}
-        >
-          {text.get(w.id)}
-        </span>
-      ))}
     </div>
   );
 }

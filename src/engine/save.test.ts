@@ -87,6 +87,9 @@ describe('projects', () => {
   it('round-trip and default a missing name', () => {
     expect(fromSavedProject(JSON.parse(JSON.stringify(toSavedProject(project, 7))))).toEqual({ version: SAVE_VERSION, savedAt: 7, project });
     expect(fromSavedProject({ version: 2, project: { id: 'p2' } })?.project).toEqual({ id: 'p2', name: 'Untitled project', recordingIds: [] });
+    // lane sizes: known lanes and sizes only
+    const sized = fromSavedProject({ version: 2, project: { id: 'p3', laneSizes: { music: 'L', interview: 'X', nope: 'M' } } });
+    expect(sized?.project.laneSizes).toEqual({ music: 'L' });
     expect(fromSavedProject({ version: 2, project: {} })).toBeNull();
   });
 

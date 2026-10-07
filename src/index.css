@@ -129,6 +129,8 @@ select { background: var(--panel); border: 1px solid var(--line); border-radius:
 .doc { overflow: auto; padding: 24px 20px 80px; }
 .doc-inner { max-width: 760px; margin: 0 auto; position: relative; }
 .para { display: grid; grid-template-columns: 88px 1fr; gap: 16px; margin-bottom: 20px; }
+/* a long transcript: the browser skips laying out paragraphs that are off screen */
+.para { content-visibility: auto; contain-intrinsic-size: auto 160px; }
 .para-label { display: flex; flex-direction: column; align-items: flex-start; font-weight: 600; font-size: 13px; padding-top: 4px; user-select: none; }
 .para-label .ts { color: var(--muted); font-weight: 400; font-size: 12px; }
 .para p { margin: 0; font-size: 17px; line-height: 1.75; max-width: 70ch; user-select: none; }
@@ -344,6 +346,7 @@ kbd { font: 12px ui-monospace, monospace; border: 1px solid var(--line); border-
 .overview .edge.l { left: -5px; }
 .overview .edge.r { right: -5px; }
 @media (max-width: 700px) { .overview { margin-left: 0; } }
+.overview .ov-clip { position: absolute; box-sizing: border-box; border: 1px solid var(--panel); border-radius: 3px; opacity: .8; pointer-events: none; }
 .transport .reset { padding: 2px 8px; font-size: 12px; }
 
 /* projects with several recordings: sidebar (mockups/files-c-collapsible.html), add dialog */
@@ -540,7 +543,7 @@ kbd { font: 12px ui-monospace, monospace; border: 1px solid var(--line); border-
 .duck-band { position: absolute; top: 0; bottom: 0; pointer-events: none; background: repeating-linear-gradient(135deg, transparent 0 5px, color-mix(in srgb, var(--fg) 9%, transparent) 5px 7px); }
 .level-bar { position: absolute; height: 12px; transform: translateY(-50%); cursor: ns-resize; z-index: 2; }
 .level-bar:hover { background: linear-gradient(transparent 4px, color-mix(in srgb, var(--accent) 45%, transparent) 4px 8px, transparent 8px); }
-.keyframe { position: absolute; width: 9px; height: 9px; margin: -4.5px; transform: rotate(45deg); background: var(--panel); border: 2px solid var(--fg); border-radius: 1px; cursor: ew-resize; z-index: 3; }
+.keyframe { position: absolute; width: 9px; height: 9px; margin: -4.5px; transform: rotate(45deg); background: var(--panel); border: 2px solid var(--fg); border-radius: 1px; cursor: move; z-index: 3; }
 .keyframe:hover { background: var(--accent); border-color: var(--accent); }
 .env-readout { position: absolute; z-index: 4; transform: translate(8px, -50%); padding: 0 5px; border-radius: 4px; background: var(--fg); color: var(--bg); font-size: 10px; line-height: 15px; white-space: nowrap; pointer-events: none; }
 .insp-duck { display: inline-flex; align-items: center; gap: 6px; }
@@ -550,14 +553,12 @@ kbd { font: 12px ui-monospace, monospace; border: 1px solid var(--line); border-
 .focus-bar { display: flex; align-items: center; gap: 10px; margin-bottom: 8px; font-size: 12px; }
 .focus-bar b { font-size: 13px; }
 .focus-bar button { padding: 3px 10px; font-size: 12px; }
-.mlane.slim .lane-head { padding-top: 0; padding-bottom: 0; min-height: 0; justify-content: center; }
-.mlane.slim .lane-head .muted, .mlane.slim .lane-head .ico { display: none; }
-.mlane.slim .lane-head b { font-size: 11px; font-weight: 500; }
-.mlane.slim .mclip b, .mlane.slim .mclip .fade-handle, .mlane.slim .mclip .keyframe, .mlane.slim .mclip .level-bar { display: none; }
-.mlane.slim .lane-empty { display: none; }
-.mlane.big .mclip b { font-size: 12px; top: 3px; }
-.clip-words { position: absolute; left: 0; right: 0; bottom: 5px; height: 35px; z-index: 2; pointer-events: none; }
-.clip-words span { position: absolute; bottom: 0; overflow: hidden; white-space: nowrap; padding: 0 3px; border-radius: 3px; font-size: 11px; line-height: 17px; background: color-mix(in srgb, var(--panel) 82%, transparent); }
+.mlane.size-L .mclip b { font-size: 12px; top: 3px; }
+
+/* main timeline lane heights (mockups/bigs-a-lane-sizes.html) */
+.lane-size { display: flex !important; gap: 2px; margin-top: 4px; }
+.lane-size button { padding: 0 5px; font-size: 10px; line-height: 16px; border-radius: 4px; color: var(--muted); }
+.lane-size button.on { background: var(--sel); border-color: var(--accent); color: var(--sel-fg); }
 
 /* playhead grip in the ruler: drag it, or anywhere on the ruler, to scrub */
 .scrub-ruler, .mruler { cursor: ew-resize; touch-action: none; }

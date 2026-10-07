@@ -32,8 +32,8 @@ export function layout(main: MainTimeline): Placed[] {
   return placed;
 }
 
-/** How long a keyframe's change takes, centred on it, seconds (less if the stretches are short). */
-export const KEY_RAMP = 1;
+/** How long a keyframe's change took in the first keyframe model (stretches), seconds: only to convert old saves. */
+const KEY_RAMP = 1;
 /** How long music takes to go down before voice, and back up after it, seconds. */
 export const DUCK_RAMP = 0.5;
 /** Keyframes closer than this to each other or to the clip's ends are refused. */
@@ -59,18 +59,38 @@ export function duckSpans(voice: [number, number][], start: number, length: numb
   return out;
 }
 
-/** Keyframe volume at clip time `t`: the stretch's level, eased across each keyframe. */
-export function keyLevel(t: number, c: Pick<MainClip, 'keys' | 'levels'> & { length: number }): number {
+/**
+ * Keyframe volume at clip time `t` (Premiere style): each keyframe has its own level, the volume eases
+ * from one keyframe to the next and holds the first and last level before and after them.
+ */
+export function keyLevel(t: number, c: Pick<MainClip, 'keys' | 'levels'>): number {
   const keys = c.keys ?? [];
   const levels = c.levels ?? [];
-  if (!keys.length || levels.length !== keys.length + 1) return 1;
-  for (let j = 0; j < keys.length; j++) {
-    const k = keys[j];
-    const r = Math.min(KEY_RAMP, k - (keys[j - 1] ?? 0), (keys[j + 1] ?? c.length) - k);
-    if (t < k - r / 2) return levels[j];
-    if (t <= k + r / 2) return levels[j] + (levels[j + 1] - levels[j]) * ease((t - (k - r / 2)) / r);
-  }
-  return levels[keys.length];
+  if (!keys.length || levels.length !== keys.length) return 1;
+  if (t <= keys[0]) return levels[0];
+  for (let j = 1; j < keys.length; j++)
+    if (t < keys[j]) return levels[j - 1] + (levels[j] - levels[j - 1]) * ease((t - keys[j - 1]) / (keys[j] - keys[j - 1]));
+  return levels[keys.length - 1];
+}
+
+/**
+ * The first keyframe model (a level per stretch between keyframes, eased over KEY_RAMP across each
+ * keyframe) as keyframes with their own level that sound the same: a change becomes a keyframe either
+ * side of its ramp, an unchanged keyframe stays one.
+ */
+export function fromStretches(keys: number[], levels: number[], length: number): Pick<MainClip, 'keys' | 'levels'> {
+  const out: [number, number][] = [];
+  const push = (t: number, l: number) => {
+    const last = out.at(-1);
+    if (!last || t - last[0] > 1e-6) out.push([t, l]);
+  };
+  keys.forEach((k, j) => {
+    if (levels[j] === levels[j + 1]) return push(k, levels[j]);
+    const r = Math.min(KEY_RAMP, k - (keys[j - 1] ?? 0), (keys[j + 1] ?? length) - k);
+    push(k - r / 2, levels[j]);
+    push(k + r / 2, levels[j + 1]);
+  });
+  return { keys: out.map((p) => p[0]), levels: out.map((p) => p[1]) };
 }
 
 /** Lower-under-voice factor at clip time `t`: `duck` during voice, easing over DUCK_RAMP either side. */
@@ -229,6 +249,23 @@ export const updateClip = (main: MainTimeline, id: string, patch: Partial<MainCl
   clips: main.clips.map((c) => (c.id === id ? { ...c, ...patch } : c)),
 });
 
+/**
+ * Rename speaker `speakerId` of clip `id`, and of every other clip from the same recording (a clip cut
+ * in two, or sent twice, keeps one name). The recording itself keeps its names. Unchanged if blank or the same.
+ */
+export function renameClipSpeaker(main: MainTimeline, id: string, speakerId: string, name: string): MainTimeline {
+  const clean = name.trim();
+  const c = main.clips.find((x) => x.id === id);
+  if (!c || !clean || c.speakers.find((s) => s.id === speakerId)?.name === clean) return main;
+  return {
+    clips: main.clips.map((x) =>
+      x.recordingId === c.recordingId && x.speakers.some((s) => s.id === speakerId)
+        ? { ...x, speakers: x.speakers.map((s) => (s.id === speakerId ? { ...s, name: clean } : s)) }
+        : x,
+    ),
+  };
+}
+
 export const removeClips = (main: MainTimeline, ids: Iterable<string>): MainTimeline => {
   const gone = new Set(ids);
   return { clips: main.clips.filter((c) => !gone.has(c.id)) };
@@ -325,13 +362,14 @@ export function splitClip(main: MainTimeline, id: string, t: number): { main: Ma
   };
   const base = c.name.replace(/ \d+$/, '');
   const n = Number(/ (\d+)$/.exec(c.name)?.[1] ?? 1);
-  // keyframes go with their piece; both pieces keep the level that was playing at the cut
-  const keys = c.keys ?? [];
-  const levels = c.levels?.length === keys.length + 1 ? c.levels : keys.map(() => 1).concat(1);
-  const nLeft = keys.filter((k) => k < t).length;
-  const envA = keys.length ? { keys: keys.slice(0, nLeft), levels: levels.slice(0, nLeft + 1) } : {};
-  const right = keys.filter((k) => k > t);
-  const envB = keys.length ? { keys: right.map((k) => k - t), levels: levels.slice(keys.length - right.length) } : {};
+  // keyframes go with their piece, and each piece gets one at the cut, at the level playing there
+  const keys = c.keys?.length && c.levels?.length === c.keys.length ? c.keys : [];
+  const levels = c.levels ?? [];
+  const cutLevel = keyLevel(t, c);
+  const left = keys.flatMap((k, i) => (k < t ? [i] : []));
+  const right = keys.flatMap((k, i) => (k > t ? [i] : []));
+  const envA = keys.length ? { keys: [...left.map((i) => keys[i]), t], levels: [...left.map((i) => levels[i]), cutLevel] } : {};
+  const envB = keys.length ? { keys: [0, ...right.map((i) => keys[i] - t)], levels: [cutLevel, ...right.map((i) => levels[i])] } : {};
   const a: MainClip = { ...c, ...envA, name: `${base} ${n}`, segments: first, words: c.words.filter(inFirst), fadeOut: 0 };
   const b: MainClip = {
     ...c,
@@ -376,42 +414,58 @@ export function snapMove(start: number, length: number, targets: SnapTarget[], t
   return best;
 }
 
-/** Add a keyframe at clip time `t`; the stretch it splits keeps its level on both sides. Unchanged if too close to another or an end. */
+/** The clip's keyframes, or none if they are not a matching pair. */
+const keysOf = (c: MainClip) => (c.keys?.length && c.levels?.length === c.keys.length ? { keys: c.keys, levels: c.levels } : { keys: [], levels: [] });
+
+/** Add a keyframe at clip time `t`, at the volume playing there, so nothing changes until it is dragged. Unchanged if too close to another or an end. */
 export function addKey(main: MainTimeline, id: string, t: number): MainTimeline {
   const c = main.clips.find((x) => x.id === id);
   if (!c) return main;
-  const keys = c.keys ?? [];
-  const levels = c.levels?.length === keys.length + 1 ? c.levels : keys.map(() => 1).concat(1);
+  const { keys, levels } = keysOf(c);
   if (t < MIN_KEY_GAP || t > clipLength(c) - MIN_KEY_GAP || keys.some((k) => Math.abs(k - t) < MIN_KEY_GAP)) return main;
   const i = keys.filter((k) => k < t).length;
-  return updateClip(main, id, { keys: [...keys.slice(0, i), t, ...keys.slice(i)], levels: [...levels.slice(0, i + 1), levels[i], ...levels.slice(i + 1)] });
+  const level = keyLevel(t, c);
+  return updateClip(main, id, { keys: [...keys.slice(0, i), t, ...keys.slice(i)], levels: [...levels.slice(0, i), level, ...levels.slice(i)] });
 }
 
-/** Remove keyframe `j`: the stretches either side join, at the level of the one before it. */
+/** Remove keyframe `j`. */
 export function removeKey(main: MainTimeline, id: string, j: number): MainTimeline {
   const c = main.clips.find((x) => x.id === id);
-  const keys = c?.keys ?? [];
-  if (!c || j < 0 || j >= keys.length) return main;
-  const levels = c.levels ?? [];
+  if (!c) return main;
+  const { keys, levels } = keysOf(c);
+  if (j < 0 || j >= keys.length) return main;
   const next = keys.filter((_, i) => i !== j);
-  return updateClip(main, id, next.length ? { keys: next, levels: levels.filter((_, i) => i !== j + 1) } : { keys: undefined, levels: undefined });
+  return updateClip(main, id, next.length ? { keys: next, levels: levels.filter((_, i) => i !== j) } : { keys: undefined, levels: undefined });
 }
 
 /** Move keyframe `j` to clip time `t`, kept between its neighbours. */
 export function moveKey(main: MainTimeline, id: string, j: number, t: number): MainTimeline {
   const c = main.clips.find((x) => x.id === id);
-  const keys = c?.keys ?? [];
+  const keys = c ? keysOf(c).keys : [];
   if (!c || j < 0 || j >= keys.length) return main;
-  const lo = (keys[j - 1] ?? 0) + MIN_KEY_GAP;
-  const hi = (keys[j + 1] ?? clipLength(c)) - MIN_KEY_GAP;
+  const lo = j > 0 ? keys[j - 1] + MIN_KEY_GAP : 0;
+  const hi = j < keys.length - 1 ? keys[j + 1] - MIN_KEY_GAP : clipLength(c);
   return updateClip(main, id, { keys: keys.map((k, i) => (i === j ? Math.max(lo, Math.min(hi, t)) : k)) });
 }
 
-/** Set the volume of stretch `i` (0 to MAX_GAIN, relative to the clip's volume). */
-export function setLevel(main: MainTimeline, id: string, i: number, level: number): MainTimeline {
+/**
+ * The keyframes a drag on the volume line at clip time `t` moves: the two either side, or the first
+ * (or last) one before (or after) every keyframe, as in Premiere.
+ */
+export function keysAround(c: Pick<MainClip, 'keys'>, t: number): number[] {
+  const keys = c.keys ?? [];
+  if (!keys.length) return [];
+  const i = keys.filter((k) => k <= t).length;
+  return i === 0 ? [0] : i === keys.length ? [i - 1] : [i - 1, i];
+}
+
+/** Change the volume of keyframes `js` by `delta` (each kept within 0 to MAX_GAIN, relative to the clip's volume). */
+export function shiftLevels(main: MainTimeline, id: string, js: number[], delta: number): MainTimeline {
   const c = main.clips.find((x) => x.id === id);
-  if (!c?.levels || i < 0 || i >= c.levels.length) return main;
-  return updateClip(main, id, { levels: c.levels.map((l, k) => (k === i ? Math.max(0, Math.min(MAX_GAIN, level)) : l)) });
+  if (!c) return main;
+  const { levels } = keysOf(c);
+  if (!levels.length) return main;
+  return updateClip(main, id, { levels: levels.map((l, k) => (js.includes(k) ? Math.max(0, Math.min(MAX_GAIN, l + delta)) : l)) });
 }
 
 /**

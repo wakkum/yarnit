@@ -3,7 +3,7 @@
 // The timeline itself lives in the project (`project.main`) and is saved with it on every change.
 import { MixPlayer } from '../audio/mix';
 import { Player } from '../audio/player';
-import { decodeFile } from '../audio/decode';
+import { decodeFile, resampled } from '../audio/decode';
 import { displayWords } from '../engine/edl';
 import { passages, wordColors } from '../engine/highlights';
 import {
@@ -18,6 +18,7 @@ import {
   moveSpeechClip,
   partSegments,
   removeClips,
+  renameClipSpeaker,
   renderMix,
   splitClip,
   updateClip,
@@ -25,7 +26,7 @@ import {
   type Placed,
 } from '../engine/main';
 import { snapToQuiet } from '../engine/render';
-import { isSpeech, type HighlightColor, type MainClip, type MainTimeline } from '../engine/types';
+import { isSpeech, type HighlightColor, type LaneSize, type MainClip, type MainTimeline, type RecordingKind } from '../engine/types';
 import { computePeaks, type ZoomView } from '../engine/view';
 import * as library from './library';
 import { media } from './media';
@@ -44,8 +45,10 @@ export type MainSlice = {
   mainFuture: MainTimeline[];
   /** The selected clip; its volume and fades show under the lanes. */
   mainClip: string | null;
-  /** Focus (mockups/zoomclip-b-focus.html): one clip zoomed to fill the view, its lane tall; `back` is the zoom to return to. */
+  /** Focus (mockups/zoomclip-b-focus.html): one clip zoomed to fill the view (lane heights are the lane size buttons); `back` is the zoom to return to. */
   mainFocus: { id: string; back: ZoomView | null } | null;
+  /** Set a main timeline lane's height (saved with the project, no undo step). */
+  setLaneSize: (kind: RecordingKind, size: LaneSize) => void;
   /** Focus a clip, or with null go back to the whole timeline. */
   focusClip: (id: string | null) => void;
   /** Where sent music and effects land: the main timeline's playhead when it was last open. */
@@ -57,6 +60,8 @@ export type MainSlice = {
   /** One undoable, saved change; `before` is the state to undo to (for drags that previewed). */
   commitMain: (main: MainTimeline, before?: MainTimeline) => void;
   updateClip: (id: string, patch: Partial<MainClip>) => void;
+  /** Rename a speaker in a clip and in every other clip from its recording (undoable). */
+  renameMainSpeaker: (clipId: string, speakerId: string, name: string) => void;
   moveClip: (id: string, dir: -1 | 1) => void;
   removeClip: (id: string) => void;
   /** Split a clip in two at main-timeline time `t` (a voice clip: in the nearest gap between words). */
@@ -142,6 +147,11 @@ export function createMainSlice(set: (p: Partial<State>) => void, get: () => Sta
     mainClip: null,
     mainFocus: null,
     mainPlayhead: 0,
+
+    setLaneSize(kind, size) {
+      const project = get().project;
+      if (project && project.laneSizes?.[kind] !== size) h.persistProject(set, { ...project, laneSizes: { ...project.laneSizes, [kind]: size } });
+    },
 
     async openMain() {
       const project = get().project;
@@ -233,6 +243,12 @@ export function createMainSlice(set: (p: Partial<State>) => void, get: () => Sta
       get().commitMain(updateClip(mainOf(get()), id, patch));
     },
 
+    renameMainSpeaker(clipId, speakerId, name) {
+      const main = mainOf(get());
+      const next = renameClipSpeaker(main, clipId, speakerId, name);
+      if (next !== main) get().commitMain(next);
+    },
+
     moveClip(id, dir) {
       const main = mainOf(get());
       const next = moveSpeechClip(main, id, dir);
@@ -315,9 +331,10 @@ export function createMainSlice(set: (p: Partial<State>) => void, get: () => Sta
     async exportMain(format) {
       const main = mainOf(get());
       if (!main.clips.length) return;
+      // files can have different sample rates: mix at the highest, converting the others first
+      const rate = Math.max(...[...media.mainBuffers.values()].map((b) => b.sampleRate), 8000);
       const audio = new Map<string, Float32Array[]>();
-      for (const [id, b] of media.mainBuffers) audio.set(id, Array.from({ length: b.numberOfChannels }, (_, c) => b.getChannelData(c)));
-      const rate = media.player?.ctx.sampleRate ?? 48_000;
+      for (const [id, b] of media.mainBuffers) audio.set(id, await resampled(b, rate));
       await h.runExport(renderMix(main, audio, rate), rate, format, get().project?.name ?? 'Main timeline');
     },
   };

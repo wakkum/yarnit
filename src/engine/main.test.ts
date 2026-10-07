@@ -7,7 +7,10 @@ import {
   keyLevel,
   moveKey,
   removeKey,
-  setLevel,
+  renameClipSpeaker,
+  fromStretches,
+  keysAround,
+  shiftLevels,
   clampFades,
   clipEntries,
   cutPoint,
@@ -246,47 +249,90 @@ describe('snapping', () => {
   });
 });
 
+describe('renameClipSpeaker', () => {
+  it('renames the speaker in every clip from the same recording, not in others', () => {
+    const sp = [{ id: 'sp1', name: 'Speaker 1' }];
+    const main = {
+      clips: [
+        clip('a', 'interview', 5, { speakers: sp }),
+        clip('b', 'interview', 5, { speakers: sp }),
+        clip('c', 'interview', 5, { speakers: sp, recordingId: 'r2' }),
+      ],
+    };
+    const next = renameClipSpeaker(main, 'a', 'sp1', '  Omar ');
+    expect(next.clips.map((c) => c.speakers[0].name)).toEqual(['Omar', 'Omar', 'Speaker 1']);
+    expect(sp[0].name).toBe('Speaker 1');
+    expect(renameClipSpeaker(next, 'a', 'sp1', 'Omar')).toBe(next);
+    expect(renameClipSpeaker(next, 'a', 'sp1', '  ')).toBe(next);
+  });
+});
+
 describe('volume keyframes', () => {
   const bed = () => ({ clips: [clip('m', 'music', 20, { at: 0 })] });
+  // a dip: four keyframes, the middle two turned down to 40%
+  const dip = () => shiftLevels([5, 6, 14, 15].reduce((m, t) => addKey(m, 'm', t), bed()), 'm', keysAround({ keys: [5, 6, 14, 15] }, 10), -0.6);
 
-  it('splits a stretch in two at the same level, then lets one be turned down', () => {
-    let main = addKey(addKey(bed(), 'm', 5), 'm', 10);
+  it('adds a keyframe at the volume playing there, so nothing changes yet', () => {
+    const main = addKey(addKey(bed(), 'm', 5), 'm', 10);
     expect(main.clips[0].keys).toEqual([5, 10]);
-    expect(main.clips[0].levels).toEqual([1, 1, 1]);
-    main = setLevel(main, 'm', 1, 0.4);
-    const c = layout(main)[0];
-    expect(keyLevel(2, c)).toBe(1);
-    expect(keyLevel(7.5, c)).toBe(0.4);
-    expect(keyLevel(15, c)).toBe(1);
+    expect(main.clips[0].levels).toEqual([1, 1]);
+    const c = dip().clips[0];
+    expect(c.levels).toEqual([1, 0.4, 0.4, 1]);
+    // added on the slope of the dip, it takes the level there
+    expect(addKey(dip(), 'm', 5.5).clips[0].levels![1]).toBeCloseTo(0.7);
   });
 
-  it('eases across a keyframe: halfway at the key, gentle at both ends of the ramp', () => {
-    const c = layout(setLevel(addKey(bed(), 'm', 5), 'm', 1, 0))[0];
-    expect(keyLevel(4.5, c)).toBe(1);
-    expect(keyLevel(5, c)).toBeCloseTo(0.5);
-    expect(keyLevel(5.5, c)).toBeCloseTo(0);
-    // an S-curve: a tenth into the ramp it has moved far less than a tenth
-    expect(1 - keyLevel(4.6, c)).toBeLessThan(0.05);
+  it('eases from keyframe to keyframe and holds the ends', () => {
+    const c = layout(dip())[0];
+    expect(keyLevel(2, c)).toBe(1);
+    expect(keyLevel(5.5, c)).toBeCloseTo(0.7);
+    expect(keyLevel(10, c)).toBeCloseTo(0.4);
+    expect(keyLevel(18, c)).toBe(1);
+    // an S-curve: a tenth of the way it has moved far less than a tenth
+    expect(1 - keyLevel(5.1, c)).toBeLessThan(0.6 * 0.05);
+  });
+
+  it('moves the keyframes either side of a stretch, or the end one outside them', () => {
+    const c = { keys: [5, 6, 14, 15] };
+    expect(keysAround(c, 2)).toEqual([0]);
+    expect(keysAround(c, 10)).toEqual([1, 2]);
+    expect(keysAround(c, 18)).toEqual([3]);
+    expect(keysAround({}, 3)).toEqual([]);
+    // one keyframe on its own, kept within 0 and MAX_GAIN
+    expect(shiftLevels(dip(), 'm', [0], 5).clips[0].levels).toEqual([2, 0.4, 0.4, 1]);
+    expect(shiftLevels(dip(), 'm', [1, 2], -1).clips[0].levels).toEqual([1, 0, 0, 1]);
   });
 
   it('refuses keyframes too close together, removes and moves them', () => {
     let main = addKey(bed(), 'm', 5);
     expect(addKey(main, 'm', 5.1)).toBe(main);
     expect(addKey(main, 'm', 0.05)).toBe(main);
-    main = setLevel(addKey(main, 'm', 10), 'm', 1, 0.3);
+    main = shiftLevels(addKey(main, 'm', 10), 'm', [1], -0.7);
     expect(moveKey(main, 'm', 0, 12).clips[0].keys).toEqual([9.8, 10]);
-    const gone = removeKey(main, 'm', 1);
-    expect(gone.clips[0].keys).toEqual([5]);
-    expect(gone.clips[0].levels).toEqual([1, 0.3]);
+    expect(moveKey(main, 'm', 1, 30).clips[0].keys).toEqual([5, 20]);
+    const gone = removeKey(main, 'm', 0);
+    expect(gone.clips[0].keys).toEqual([10]);
+    expect(gone.clips[0].levels![0]).toBeCloseTo(0.3);
     expect(removeKey(gone, 'm', 0).clips[0].keys).toBeUndefined();
   });
 
-  it('keeps keyframes with their piece when the clip is cut', () => {
-    const main = setLevel(addKey(addKey(bed(), 'm', 5), 'm', 15), 'm', 1, 0.5);
-    const r = splitClip(main, 'm', 8)!;
+  it('keeps keyframes with their piece when the clip is cut, with one at the cut', () => {
+    const r = splitClip(dip(), 'm', 10)!;
     const [a, b] = r.main.clips;
-    expect([a.keys, a.levels]).toEqual([[5], [1, 0.5]]);
-    expect([b.keys, b.levels]).toEqual([[7], [0.5, 1]]);
+    expect(a.keys).toEqual([5, 6, 10]);
+    expect(a.levels!.map((l) => +l.toFixed(3))).toEqual([1, 0.4, 0.4]);
+    expect(b.keys).toEqual([0, 4, 5]);
+    expect(b.levels!.map((l) => +l.toFixed(3))).toEqual([0.4, 0.4, 1]);
+  });
+
+  it('converts the first model (a level per stretch) so it sounds the same', () => {
+    // keys at 5 and 10, the stretch between at 40%: each change eased over 1 s across its key
+    const old = fromStretches([5, 10, 15], [1, 0.4, 1, 1], 20);
+    expect(old.keys).toEqual([4.5, 5.5, 9.5, 10.5, 15]);
+    expect(old.levels).toEqual([1, 0.4, 0.4, 1, 1]);
+    const c = { ...old };
+    expect(keyLevel(5, c)).toBeCloseTo(0.7);
+    expect(keyLevel(7, c)).toBeCloseTo(0.4);
   });
 });
 

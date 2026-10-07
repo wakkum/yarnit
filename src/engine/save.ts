@@ -1,8 +1,8 @@
 // Autosave format. A project and each of its recordings are saved as separate records, so editing
 // one recording never rewrites the others. Audio files are stored apart (src/state/library.ts),
 // keyed by track id. Version 1 (before 6 Oct 2026) saved one recording per "project".
-import { MAX_GAIN } from './main';
-import { HIGHLIGHT_COLORS, RECORDING_KINDS, type MainClip, type MainTimeline, type Project, type Recording, type RecordingKind } from './types';
+import { clipLength, fromStretches, MAX_GAIN } from './main';
+import { HIGHLIGHT_COLORS, LANE_SIZES, RECORDING_KINDS, type MainClip, type MainTimeline, type Project, type Recording, type RecordingKind } from './types';
 
 export const SAVE_VERSION = 2;
 
@@ -108,8 +108,15 @@ export function fromSavedProject(data: unknown): SavedProject | null {
       ...(p.lastRecordingId ? { lastRecordingId: p.lastRecordingId } : {}),
       ...(p.mainOpen ? { mainOpen: true } : {}),
       ...(p.main ? { main: readMain(p.main) } : {}),
+      ...readLaneSizes(p.laneSizes),
     },
   };
+}
+
+function readLaneSizes(data: unknown): Pick<Project, 'laneSizes'> {
+  if (!data || typeof data !== 'object') return {};
+  const sizes = Object.entries(data).filter(([k, v]) => (RECORDING_KINDS as readonly string[]).includes(k) && (LANE_SIZES as readonly unknown[]).includes(v));
+  return sizes.length ? { laneSizes: Object.fromEntries(sizes) } : {};
 }
 
 const num = (x: unknown, fallback: number) => (typeof x === 'number' && Number.isFinite(x) ? x : fallback);
@@ -118,9 +125,13 @@ const num = (x: unknown, fallback: number) => (typeof x === 'number' && Number.i
 /** Keyframes survive only as a matching pair of arrays with sane numbers. */
 function readKeys(c: MainClip): Pick<MainClip, 'keys' | 'levels'> {
   const { keys, levels } = c;
-  if (!Array.isArray(keys) || !Array.isArray(levels) || !keys.length || levels.length !== keys.length + 1) return { keys: undefined, levels: undefined };
+  if (!Array.isArray(keys) || !Array.isArray(levels) || !keys.length) return { keys: undefined, levels: undefined };
+  if (levels.length !== keys.length && levels.length !== keys.length + 1) return { keys: undefined, levels: undefined };
   if (![...keys, ...levels].every((v) => typeof v === 'number' && Number.isFinite(v))) return { keys: undefined, levels: undefined };
-  return { keys: [...keys].sort((a, b) => a - b).map((k) => Math.max(0, k)), levels: levels.map((l) => Math.max(0, Math.min(MAX_GAIN, l))) };
+  const sane = { keys: keys.map((k) => Math.max(0, k)), levels: levels.map((l) => Math.max(0, Math.min(MAX_GAIN, l))) };
+  if (sane.keys.some((k, i) => i > 0 && k < sane.keys[i - 1])) return { keys: undefined, levels: undefined };
+  // the first model: one level per stretch
+  return levels.length === keys.length ? sane : fromStretches(sane.keys, sane.levels, clipLength(c));
 }
 
 function readMain(data: unknown): MainTimeline {

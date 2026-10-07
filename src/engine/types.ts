@@ -99,8 +99,9 @@ export type MainClip = {
   /** Music and sound effects: where it starts on the main timeline, seconds. */
   at: number;
   /**
-   * Volume keyframes: clip times (seconds, ascending) that split the clip into stretches, and the
-   * volume of each stretch (0 to 2 times the clip's volume, one more than `keys`). The volume eases from one to the next.
+   * Volume keyframes: clip times (seconds, ascending) and the volume at each (0 to 2 times the clip's
+   * volume, as many as `keys`). The volume eases from one keyframe to the next. Saves from before
+   * 7 Oct 2026 (late) held one level per stretch (one more than `keys`); `readMain` converts them.
    */
   keys?: number[];
   levels?: number[];
@@ -125,4 +126,9 @@ export type Project = {
   /** True when the main timeline was open last (it then reopens instead of a recording). */
   mainOpen?: boolean;
   main?: MainTimeline;
+  /** Main timeline lane heights (mockups/bigs-a-lane-sizes.html); unset = small. A view setting: no undo. */
+  laneSizes?: Partial<Record<RecordingKind, LaneSize>>;
 };
+
+export const LANE_SIZES = ['S', 'M', 'L'] as const;
+export type LaneSize = (typeof LANE_SIZES)[number];

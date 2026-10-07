@@ -538,7 +538,9 @@ function SpeakerMenu({
 
   return (
     <div className="pop" ref={ref} style={{ left: 0, top: 'calc(100% + 6px)', width: 260 }}>
-      {current && <RenameForm key={current.id + current.name} id={current.id} name={current.name} />}
+      {current && (
+        <RenameForm key={current.id + current.name} name={current.name} onRename={(name) => useStore.getState().renameSpeaker(current.id, name)} note={`Renames every paragraph by ${current.name}.`} />
+      )}
       <h4 style={{ marginTop: 14 }}>This paragraph is by</h4>
       <div className="list">
         {recording.speakers.map((s) => (
@@ -564,13 +566,13 @@ function SpeakerMenu({
 }
 
 /** Keyed by speaker id + name, so it resets when the speaker or its name changes. */
-function RenameForm({ id, name: saved }: { id: string; name: string }) {
+export function RenameForm({ name: saved, onRename, note }: { name: string; onRename: (name: string) => void; note: string }) {
   const [name, setName] = useState(saved);
   return (
     <form
       onSubmit={(e) => {
         e.preventDefault();
-        useStore.getState().renameSpeaker(id, name);
+        onRename(name);
       }}
     >
       <h4>Speaker name</h4>
@@ -580,7 +582,7 @@ function RenameForm({ id, name: saved }: { id: string; name: string }) {
           Rename
         </button>
       </div>
-      <p className="note">Renames every paragraph by {saved}.</p>
+      <p className="note">{note}</p>
     </form>
   );
 }

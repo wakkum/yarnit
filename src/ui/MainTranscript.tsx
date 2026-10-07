@@ -1,7 +1,7 @@
 // The main timeline's transcript (mockups/main-a-lanes.html): every voice clip in running order,
 // under a header with ↑ ↓ ✕. Words edit like a recording's: click to jump, drag or Shift+click to
 // select, Delete cuts them from that clip (the clip itself is a copy; its recording is untouched).
-import { useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { displayWords, sourceToOutput } from '../engine/edl';
 import { EMPTY_MAIN, layout, wordTimes, type Placed } from '../engine/main';
 import { isSpeech } from '../engine/types';
@@ -9,6 +9,7 @@ import { paragraphs } from '../engine/view';
 import { useStore } from '../state/store';
 import { combo } from './keys';
 import { KindIcon } from './Sidebar';
+import { RenameForm } from './Transcript';
 import { fmt, trackColor, useMixPlayhead } from './util';
 
 export function MainTranscript() {
@@ -166,8 +167,12 @@ function ClipText({
         const out = sourceToOutput(c.segments, p.start + 0.001);
         return (
           <div className="para" key={p.key}>
-            <div className="para-label">
-              <span style={{ color: trackColor(speakerIndex(p.speakerId)), fontWeight: 600 }}>{speakerName(p.speakerId)}</span>
+            <div className="para-label" style={{ position: 'relative' }}>
+              {p.speakerId && c.speakers.some((s) => s.id === p.speakerId) ? (
+                <SpeakerName c={c} speakerId={p.speakerId} color={trackColor(speakerIndex(p.speakerId))} from={from} />
+              ) : (
+                <span style={{ color: trackColor(speakerIndex(p.speakerId)), fontWeight: 600 }}>{speakerName(p.speakerId)}</span>
+              )}
               <span className="ts mono">{out == null ? 'cut' : fmt(c.start + out)}</span>
             </div>
             <p>
@@ -199,5 +204,43 @@ function ClipText({
         );
       })}
     </section>
+  );
+}
+
+/** A speaker's name over a paragraph: click it to rename that speaker on the main timeline. */
+function SpeakerName({ c, speakerId, color, from }: { c: Placed; speakerId: string; color: string; from?: string }) {
+  const [open, setOpen] = useState(false);
+  const ref = useRef<HTMLSpanElement>(null);
+  const name = c.speakers.find((s) => s.id === speakerId)!.name;
+  useEffect(() => {
+    if (!open) return;
+    const onDown = (e: MouseEvent) => !ref.current?.contains(e.target as Node) && setOpen(false);
+    const onKey = (e: KeyboardEvent) => e.key === 'Escape' && setOpen(false);
+    window.addEventListener('mousedown', onDown);
+    window.addEventListener('keydown', onKey);
+    return () => {
+      window.removeEventListener('mousedown', onDown);
+      window.removeEventListener('keydown', onKey);
+    };
+  }, [open]);
+  return (
+    <span ref={ref}>
+      <button className={`who${open ? ' open' : ''}`} style={{ color }} onClick={() => setOpen(!open)} aria-expanded={open} title="Rename this speaker">
+        {name}
+      </button>
+      {open && (
+        <div className="pop" style={{ left: 0, top: 'calc(100% + 6px)', width: 260 }}>
+          <RenameForm
+            key={speakerId + name}
+            name={name}
+            onRename={(next) => {
+              useStore.getState().renameMainSpeaker(c.id, speakerId, next);
+              setOpen(false);
+            }}
+            note={`Renames ${name} in every clip from ${from ?? 'this recording'} here. The recording keeps its own names.`}
+          />
+        </div>
+      )}
+    </span>
   );
 }
