@@ -9,6 +9,7 @@ import { passages, wordColors } from '../engine/highlights';
 import {
   addClips,
   clipLength,
+  cutPoint,
   deleteClipWords,
   EMPTY_MAIN,
   layout,
@@ -18,6 +19,7 @@ import {
   partSegments,
   removeClips,
   renderMix,
+  splitClip,
   updateClip,
   wordsToSegments,
   type Placed,
@@ -53,6 +55,10 @@ export type MainSlice = {
   updateClip: (id: string, patch: Partial<MainClip>) => void;
   moveClip: (id: string, dir: -1 | 1) => void;
   removeClip: (id: string) => void;
+  /** Split a clip in two at main-timeline time `t` (a voice clip: in the nearest gap between words). */
+  cutClip: (id: string, t: number) => void;
+  /** The main timeline's playhead, live while playing. */
+  mainTime: () => number;
   selectClip: (id: string | null) => void;
   playClip: (id: string) => void;
   seekMain: (t: number) => void;
@@ -234,6 +240,21 @@ export function createMainSlice(set: (p: Partial<State>) => void, get: () => Sta
     },
 
     selectClip: (mainClip) => set({ mainClip }),
+
+    cutClip(id, t) {
+      const main = mainOf(get());
+      const c = layout(main).find((x) => x.id === id);
+      if (!c) return;
+      const r = splitClip(main, id, cutPoint(c, t - c.start).t);
+      if (!r) {
+        set({ notice: 'Too close to the edge of the clip to cut there.' });
+        return;
+      }
+      get().commitMain(r.main);
+      set({ mainClip: id });
+    },
+
+    mainTime: () => (media.mix ? media.mix.currentTime : get().mainPlayhead),
 
     playClip(id) {
       const c = layout(mainOf(get())).find((x) => x.id === id);

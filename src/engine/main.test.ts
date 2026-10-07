@@ -4,6 +4,7 @@ import {
   addClips,
   clampFades,
   clipEntries,
+  cutPoint,
   deleteClipWords,
   fadeGain,
   layout,
@@ -12,6 +13,9 @@ import {
   moveSpeechClip,
   partSegments,
   removeClips,
+  snapMove,
+  snapTargets,
+  splitClip,
   renderMix,
   updateClip,
   wordsToSegments,
@@ -169,5 +173,68 @@ describe('sending to the main timeline', () => {
     const alone = makeClip(r, [{ id: 'x', start: 0.4, end: 1.1 }], 'Just a');
     expect(deleteClipWords({ clips: [alone] }, [alone.words[0].id]).clips).toEqual([]);
     expect(wordTimes(layout(main))[0]).toMatchObject({ id: a.id, at: 0.5 });
+  });
+});
+
+describe('cutting a clip', () => {
+  it('splits music into two back-to-back clips, fades kept on the outer ends', () => {
+    const main = { clips: [clip('m', 'music', 10, { at: 2, fadeIn: 1, fadeOut: 2, gain: 0.3, name: 'Bed' })] };
+    const r = splitClip(main, 'm', 4)!;
+    const [a, b] = r.main.clips;
+    expect([a.id, b.id]).toEqual(['m', r.second]);
+    expect([a.name, b.name]).toEqual(['Bed 1', 'Bed 2']);
+    expect([a.at, b.at]).toEqual([2, 6]);
+    expect([a.fadeIn, a.fadeOut, b.fadeIn, b.fadeOut]).toEqual([1, 0, 0, 2]);
+    expect(b.gain).toBe(0.3);
+    const placed = layout(r.main);
+    expect(placed.map((c) => [c.start, c.length])).toEqual([[2, 4], [6, 6]]);
+  });
+
+  it('keeps speech in running order with no pause between the halves, and splits the words', () => {
+    const c = makeClip(recording(), recording().segments, 'Talk');
+    const main = { clips: [clip('v', 'voiceover', 2, { gap: 1 }), c, clip('w', 'interview', 3)] };
+    const before = layout(main);
+    const r = splitClip(main, c.id, 2)!;
+    const after = layout(r.main);
+    expect(after.map((x) => x.id)).toEqual(['v', c.id, r.second, 'w']);
+    expect(after[2].start).toBeCloseTo(after[1].start + after[1].length);
+    expect(after[3].start).toBeCloseTo(before[2].start); // the clip after does not move
+    expect(r.main.clips[1].words.map((w) => w.text)).toEqual(['a']);
+    expect(r.main.clips[2].words.map((w) => w.text)).toEqual(['c', 'd']);
+    expect(r.main.clips[2].gap).toBe(0);
+  });
+
+  it('refuses a cut too close to an edge', () => {
+    expect(splitClip({ clips: [clip('m', 'music', 10)] }, 'm', 0.05)).toBeNull();
+    expect(splitClip({ clips: [clip('m', 'music', 10)] }, 'm', 9.95)).toBeNull();
+  });
+
+  it('moves a voice cut out of a word into the gap', () => {
+    const c = makeClip(recording(), recording().segments, 'Talk');
+    // output: a 0.5..1, c 2.5..3, d 4.5..5
+    expect(cutPoint(c, 2.6)).toEqual({ t: 1.75, after: 'a' });
+    expect(cutPoint(c, 2.9)).toEqual({ t: 3.75, after: 'a c' });
+    expect(cutPoint(c, 2)).toEqual({ t: 2, after: 'a' }); // already in a gap
+    expect(cutPoint(clip('m', 'music', 10), 2.6)).toEqual({ t: 2.6, after: null });
+  });
+});
+
+describe('snapping', () => {
+  const placed = layout({ clips: [clip('a', 'interview', 5, { name: 'A' }), clip('m', 'music', 4, { at: 7, name: 'M' })] });
+  const targets = snapTargets(placed, 'm', 3);
+
+  it('lists edges of the other clips, the start and the playhead', () => {
+    expect(targets.map((t) => t.t)).toEqual([0, 3, 0, 5]);
+    expect(targets[3].label).toBe('end of A');
+  });
+
+  it('lines up the nearer edge within the tolerance', () => {
+    // a 4 s clip dragged to 5.3: its start is 0.3 from the end of A
+    const s = snapMove(5.3, 4, targets, 0.5)!;
+    expect(s.shift).toBeCloseTo(-0.3);
+    expect(s.target).toBe(targets[3]);
+    // its end (at 3.2) is 0.2 from the playhead: nearer wins
+    expect(snapMove(-0.8, 4, targets, 0.5)?.target.label).toBe('the playhead');
+    expect(snapMove(6, 4, targets, 0.5)).toBeNull();
   });
 });

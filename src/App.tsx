@@ -72,6 +72,14 @@ export default function App() {
         // timeline zoom (0 is taken by highlights, so Fit is the button only)
         e.preventDefault();
         st.zoomBy(e.key === '-' ? 0.5 : 2);
+      } else if (st.mainOpen && !mod && !e.altKey && e.key.toLowerCase() === 'c') {
+        // main timeline: cut the selected clip at the playhead
+        e.preventDefault();
+        if (st.mainClip) st.cutClip(st.mainClip, st.mainTime());
+        else st.setNotice('Select a clip first, then press C to cut it at the playhead.');
+      } else if (st.mainOpen && !mod && !e.altKey && e.key.toLowerCase() === 's') {
+        e.preventDefault();
+        st.setSettings({ snap: !st.settings.snap });
       } else if (e.code === 'Space') {
         e.preventDefault();
         st.togglePlay();

@@ -103,12 +103,12 @@ const STEPS: Record<TourSection, Step[]> = {
     {
       target: 'section.main-timeline',
       title: 'One lane per kind',
-      body: 'Interviews and voice-overs play one after another, in running order. Music and effects play underneath: drag them to where they should start.',
+      body: 'Interviews and voice-overs play one after another, in running order. Music and effects play underneath: drag them to where they should start. Dragged clips snap to the edges of the others, shown by a yellow line.',
     },
     {
       target: '.mclip',
       title: 'Click a clip',
-      body: 'Set its volume (for example 30% for music under a voice), a fade in and a fade out, or the pause before it. On a selected clip, drag the small squares to set the fades.',
+      body: 'Click a spot to cut the clip in two there. Below the lanes, set its volume (for example 30% for music under a voice), a fade in and out, or the pause before it.',
     },
     {
       target: 'main.doc',

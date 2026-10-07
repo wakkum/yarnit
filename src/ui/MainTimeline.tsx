@@ -2,9 +2,9 @@
 // Interview and Voice-over clips play one after another; Music and Sound-effect clips start wherever
 // they are dragged and play under the voice. Every clip has a volume and a fade in and out; the
 // selected clip's settings show under the lanes.
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { labelRows } from '../engine/parts';
-import { clampFades, EMPTY_MAIN, fadeGain, layout, mainDuration, MAX_FADE, MAX_GAIN, updateClip, type Placed } from '../engine/main';
+import { clampFades, cutPoint, EMPTY_MAIN, fadeGain, layout, mainDuration, MAX_FADE, MAX_GAIN, snapMove, snapTargets, updateClip, type Placed, type SnapTarget } from '../engine/main';
 import { isSpeech, RECORDING_KINDS, type MainTimeline as Main, type RecordingKind } from '../engine/types';
 import { editedPieces, tickStep, type ZoomView } from '../engine/view';
 import { mainOf } from '../state/mainSlice';
@@ -20,6 +20,12 @@ const DRAG_PX = 4;
 /** Height of one row of clips in a lane, px. */
 const ROW = 44;
 const WHEEL_ZOOM = 0.006;
+/** How close, in px, a dragged edge must come to snap. */
+const SNAP_PX = 8;
+
+/** A click (not a drag) on a clip: the menu at the pointer, for main-timeline time `t`. */
+type ClipMenu = { id: string; t: number; x: number; y: number };
+const tenths = (t: number) => `${fmt(t)}.${Math.floor((t % 1) * 10 + 1e-6)}`;
 
 
 export function MainTimeline() {
@@ -31,7 +37,10 @@ export function MainTimeline() {
   const progress = useStore((s) => s.progress);
   const selected = useStore((s) => s.mainClip);
   const peaks = useStore((s) => s.peaks);
-  const { togglePlay, seekMain, setZoom, zoomBy, selectClip } = useStore.getState();
+  const snap = useStore((s) => s.settings.snap);
+  const { togglePlay, seekMain, setZoom, zoomBy, selectClip, setSettings } = useStore.getState();
+  const [guide, setGuide] = useState<SnapTarget | null>(null);
+  const [menu, setMenu] = useState<ClipMenu | null>(null);
   const placed = useMemo(() => layout(main), [main]);
   const total = mainDuration(placed);
   const view: ZoomView = zoom ?? { start: 0, span: Math.max(total, 1) };
@@ -119,10 +128,18 @@ export function MainTimeline() {
             {phase === 'error'
               ? message
               : placed.length
-                ? 'Voice clips play one after another. Drag music and effects to where they start; click a clip for its volume and fades.'
+                ? 'Voice clips play one after another. Drag clips to move them; click one to cut it there or set its volume and fades.'
                 : 'Empty so far. Open a recording and use Send to main in the top bar.'}
           </span>
         )}
+        <button
+          className={`snap-toggle${snap ? ' on' : ''}`}
+          aria-pressed={snap}
+          onClick={() => setSettings({ snap: !snap })}
+          title="Dragged clips snap to the edges of other clips and to the playhead (S). Hold Alt while dragging to skip it once."
+        >
+          Snap
+        </button>
         <div className="zoombox" role="group" aria-label="Zoom">
           <button onClick={() => zoomBy(0.5)} disabled={!zoom} title="Zoom out (−)" aria-label="Zoom out">
             −
@@ -143,6 +160,11 @@ export function MainTimeline() {
               {fmt(t)}
             </span>
           ))}
+          {guide && (
+            <b className="snap-label" style={{ left: pct(guide.t) }}>
+              Snaps to {guide.label}
+            </b>
+          )}
         </div>
         {RECORDING_KINDS.map((kind, i) => (
           <div className="lane mlane" key={kind}>
@@ -174,14 +196,19 @@ export function MainTimeline() {
                     on={c.id === selected}
                     peaks={peaks[c.trackId]}
                     color={LANE_COLOR[kind]}
+                    cutAt={menu?.id === c.id ? cutPoint(c, menu.t - c.start).t : null}
+                    onGuide={setGuide}
+                    onMenu={setMenu}
                   />
                 ))}
+              {guide && <div className="snap-guide" style={{ left: pct(guide.t) }} />}
               {!counts[kind] && <span className="lane-empty">{isSpeech(kind) ? `${KIND_LABEL[kind]} clips you send play here, one after another` : `${KIND_LABEL[kind]} you send lands here`}</span>}
               <div className="playhead" ref={(el) => void (heads.current[i] = el)} />
             </div>
           </div>
         ))}
       </div>
+      {menu && placed.some((c) => c.id === menu.id) && <ClipMenuPop menu={menu} c={placed.find((c) => c.id === menu.id)!} close={() => setMenu(null)} />}
       {selected && placed.some((c) => c.id === selected) && <Inspector key={`${selected}:${placed.find((c) => c.id === selected)!.name}`} c={placed.find((c) => c.id === selected)!} />}
     </section>
   );
@@ -193,7 +220,32 @@ function seekAt(e: React.PointerEvent, view: ZoomView, seek: (t: number) => void
 }
 
 /** One clip on a lane: drag it to move (music: its start; speech: the pause before it), click to select. */
-function Clip({ c, left, width, top, view, on, peaks, color }: { c: Placed; left: string; width: string; top: number; view: ZoomView; on: boolean; peaks?: Float32Array; color: string }) {
+function Clip({
+  c,
+  left,
+  width,
+  top,
+  view,
+  on,
+  peaks,
+  color,
+  cutAt,
+  onGuide,
+  onMenu,
+}: {
+  c: Placed;
+  left: string;
+  width: string;
+  top: number;
+  view: ZoomView;
+  on: boolean;
+  peaks?: Float32Array;
+  color: string;
+  /** Clip time where the open menu would cut, drawn as a line. */
+  cutAt: number | null;
+  onGuide: (g: SnapTarget | null) => void;
+  onMenu: (m: ClipMenu | null) => void;
+}) {
   const pieces = useMemo(() => editedPieces(c.segments).map((p) => ({ ...p, moved: false })), [c.segments]);
   const source = media.mainBuffers.get(c.trackId)?.duration ?? Math.max(...c.segments.map((s) => s.end));
   const [fi, fo] = clampFades(c.length, c.fadeIn, c.fadeOut);
@@ -207,10 +259,14 @@ function Clip({ c, left, width, top, view, on, peaks, color }: { c: Placed; left
     e.stopPropagation();
     e.preventDefault();
     st.selectClip(c.id);
+    onMenu(null);
     const body = (e.currentTarget as Element).closest('.mlane-body')!;
-    const perPx = view.span / body.getBoundingClientRect().width;
+    const box = body.getBoundingClientRect();
+    const perPx = view.span / box.width;
     const x0 = e.clientX;
     const before: Main = mainOf(useStore.getState());
+    // everything this clip can line up with, fixed for the drag (the other clips don't move meanwhile)
+    const targets = snapTargets(layout(before), c.id, st.mainTime());
     let latest = before;
     let moved = false;
     const onMove = (ev: PointerEvent) => {
@@ -218,21 +274,31 @@ function Clip({ c, left, width, top, view, on, peaks, color }: { c: Placed; left
       if (!moved && Math.abs(dx) < DRAG_PX) return;
       moved = true;
       const dt = dx * perPx;
-      const patch =
-        mode === 'move'
-          ? isSpeech(c.kind)
-            ? { gap: Math.max(0, c.gap + dt) }
-            : { at: Math.max(0, c.at + dt) }
-          : mode === 'in'
+      let patch: Partial<Placed>;
+      if (mode === 'move') {
+        // a voice clip can't start before the clip ahead of it ends (its pause can't go below 0)
+        const lowest = isSpeech(c.kind) ? c.start - c.gap : 0;
+        let start = Math.max(lowest, c.start + dt);
+        const hit = useStore.getState().settings.snap && !ev.altKey ? snapMove(start, c.length, targets, SNAP_PX * perPx) : null;
+        if (hit) start = Math.max(lowest, start + hit.shift);
+        const lined = hit && [start, start + c.length].some((edge) => Math.abs(edge - hit.target.t) < 1e-6);
+        onGuide(lined ? hit.target : null);
+        patch = isSpeech(c.kind) ? { gap: start - lowest } : { at: start };
+      } else
+        patch =
+          mode === 'in'
             ? { fadeIn: Math.min(MAX_FADE, Math.max(0, c.fadeIn + dt), c.length) }
             : { fadeOut: Math.min(MAX_FADE, Math.max(0, c.fadeOut - dt), c.length) };
       latest = updateClip(before, c.id, patch);
       st.previewMain(latest);
     };
-    const onUp = () => {
+    const onUp = (ev: PointerEvent) => {
       window.removeEventListener('pointermove', onMove);
       window.removeEventListener('pointerup', onUp);
+      onGuide(null);
       if (moved && latest !== before) st.commitMain(latest, before);
+      // a click without a drag: offer to cut there
+      else if (!moved && mode === 'move') onMenu({ id: c.id, t: view.start + ((ev.clientX - box.left) / box.width) * view.span, x: ev.clientX, y: ev.clientY });
     };
     window.addEventListener('pointermove', onMove);
     window.addEventListener('pointerup', onUp);
@@ -243,7 +309,7 @@ function Clip({ c, left, width, top, view, on, peaks, color }: { c: Placed; left
       className={`mclip${on ? ' on' : ''}${isSpeech(c.kind) ? ' speech' : ''}`}
       style={{ left, width, top, height: ROW - 4, ['--c' as string]: color }}
       onPointerDown={(e) => drag(e, 'move')}
-      title={`${c.name}: ${fmt(c.start)} to ${fmt(c.start + c.length)}, volume ${Math.round(c.gain * 100)}%${isSpeech(c.kind) ? '' : '. Drag to move.'}`}
+      title={`${c.name}: ${fmt(c.start)} to ${fmt(c.start + c.length)}, volume ${Math.round(c.gain * 100)}%. Drag to move, click to cut.`}
     >
       <Waveform peaks={peaks} color={color} source={source} length={c.length} pieces={pieces} level={level} />
       {on && (
@@ -252,6 +318,7 @@ function Clip({ c, left, width, top, view, on, peaks, color }: { c: Placed; left
         </svg>
       )}
       <b>{c.name}</b>
+      {cutAt != null && <span className="cut-mark" style={{ left: `${(cutAt / c.length) * 100}%` }} />}
       {on && (
         <>
           <span className="fade-handle in" style={{ left: `${(fi / c.length) * 100}%` }} onPointerDown={(e) => drag(e, 'in')} title="Drag to set the fade in" />
@@ -335,6 +402,71 @@ function Inspector({ c }: { c: Placed }) {
       <button className="danger" onClick={() => st.removeClip(c.id)}>
         Remove
       </button>
+    </div>
+  );
+}
+
+/** The menu a click on a clip opens (mockups/cut-a-click.html): cut there, play from there, or its settings. */
+function ClipMenuPop({ menu, c, close }: { menu: ClipMenu; c: Placed; close: () => void }) {
+  const ref = useRef<HTMLDivElement>(null);
+  const [pos, setPos] = useState({ left: menu.x + 8, top: menu.y + 8 });
+  const cut = cutPoint(c, menu.t - c.start);
+  const at = c.start + cut.t;
+  const st = useStore.getState();
+
+  // keep it on screen, and close it on a click elsewhere, Esc, or scrolling
+  useLayoutEffect(() => {
+    const r = ref.current!.getBoundingClientRect();
+    setPos({ left: Math.min(menu.x + 8, innerWidth - r.width - 16), top: menu.y + 8 + r.height > innerHeight - 16 ? menu.y - r.height - 8 : menu.y + 8 });
+  }, [menu.x, menu.y]);
+  useEffect(() => {
+    const away = (e: Event) => !ref.current?.contains(e.target as Node) && close();
+    const key = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') close();
+      else if (e.key.toLowerCase() === 'c' && !e.metaKey && !e.ctrlKey && !e.altKey) {
+        e.preventDefault();
+        e.stopPropagation();
+        st.cutClip(c.id, at);
+        close();
+      }
+    };
+    window.addEventListener('pointerdown', away, true);
+    window.addEventListener('keydown', key, true);
+    window.addEventListener('scroll', close, true);
+    return () => {
+      window.removeEventListener('pointerdown', away, true);
+      window.removeEventListener('keydown', key, true);
+      window.removeEventListener('scroll', close, true);
+    };
+  }, [close, st, c.id, at]);
+
+  const item = (label: React.ReactNode, run: () => void, hint?: string) => (
+    <button
+      role="menuitem"
+      onClick={() => {
+        close();
+        run();
+      }}
+    >
+      {label}
+      {hint && <kbd>{hint}</kbd>}
+    </button>
+  );
+  return (
+    <div ref={ref} className="clip-menu" role="menu" style={pos}>
+      <div className="clip-menu-head">
+        {c.name} at {tenths(at)}
+        {cut.after && <span className="muted">, in the pause after “{cut.after}”</span>}
+      </div>
+      {item('✂ Cut here', () => st.cutClip(c.id, at), 'C')}
+      {item('▶ Play from here', () => {
+        st.seekMain(at);
+        if (!useStore.getState().playing) st.togglePlay();
+      })}
+      {item('Clip settings', () => {
+        st.selectClip(c.id);
+        requestAnimationFrame(() => document.querySelector<HTMLInputElement>('.inspector .insp-vol input')?.focus());
+      })}
     </div>
   );
 }

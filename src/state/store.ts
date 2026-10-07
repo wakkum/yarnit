@@ -64,6 +64,8 @@ export type Settings = {
   showOriginal: boolean;
   /** The project sidebar: full list, or folded to a rail of icons. */
   sidebar: 'open' | 'rail';
+  /** Main timeline: dragged clips snap to clip edges and the playhead. */
+  snap: boolean;
   /** First-run tour: which sections were shown, or switched off. */
   tour: TourState;
 };
@@ -77,6 +79,7 @@ const DEFAULT_SETTINGS: Settings = {
   pauseKeep: 0.4,
   showOriginal: false,
   sidebar: 'open',
+  snap: true,
   tour: FRESH_TOUR,
 };
 const SETTINGS_KEY = 'yarnit.settings';

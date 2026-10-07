@@ -1,6 +1,6 @@
 // The main timeline: clips copied from recordings, laid out on lanes and mixed. Pure: the player
 // (src/audio/mix.ts) and export both use `layout`, `clipEntries` and `fadeGain`, so they agree.
-import { deleteWords, displayWords, newId, normalize, outputDuration, sourceSlices, sourceToOutput, type DisplayWord, type Snap } from './edl';
+import { deleteWords, displayWords, newId, normalize, outputDuration, outputToSourceAt, sourceSlices, sourceToOutput, type DisplayWord, type Snap } from './edl';
 import { FADE_SECONDS } from './render';
 import { isSpeech, type MainClip, type MainTimeline, type Recording, type Segment } from './types';
 
@@ -212,4 +212,96 @@ export function wordTimes(placed: Placed[]): { id: string; clipId: string; at: n
     }
   }
   return out.sort((a, b) => a.at - b.at);
+}
+
+/** Shortest piece a cut may leave, seconds. */
+export const MIN_CLIP = 0.1;
+
+/**
+ * Where a cut at clip time `t` really goes: on a voice clip, never inside a word but in the middle
+ * of the nearest gap between two kept words. `after` is the last few words before the cut (for the popup).
+ */
+export function cutPoint(c: Pick<MainClip, 'kind' | 'segments' | 'words'>, t: number): { t: number; after: string | null } {
+  if (!isSpeech(c.kind)) return { t, after: null };
+  const kept = displayWords(c.words, c.segments)
+    .filter((d) => !d.deleted)
+    .map((d) => {
+      const m = sourceToOutput(c.segments, mid(d.word)) ?? 0;
+      return { text: d.word.text, start: m - (mid(d.word) - d.word.start), end: m + (d.word.end - mid(d.word)) };
+    });
+  const length = outputDuration(c.segments);
+  // every gap between words (and before the first, after the last) as a candidate cut
+  const gaps: { t: number; after: string | null }[] = [];
+  for (let i = 0; i <= kept.length; i++) {
+    const a = i === 0 ? 0 : kept[i - 1].end;
+    const b = i === kept.length ? length : kept[i].start;
+    gaps.push({ t: i === 0 ? b : i === kept.length ? a : (a + Math.max(a, b)) / 2, after: i === 0 ? null : kept.slice(Math.max(0, i - 3), i).map((k) => k.text).join(' ') });
+  }
+  const inGap = gaps.find((_, i) => (i === 0 ? 0 : kept[i - 1].end) <= t && t <= (i === kept.length ? length : kept[i].start));
+  if (inGap) return { t, after: inGap.after };
+  return gaps.reduce((best, g) => (Math.abs(g.t - t) < Math.abs(best.t - t) ? g : best));
+}
+
+/**
+ * Split a clip at clip time `t` (seconds from its start) into two clips that play back to back: the
+ * first keeps the id, the fade in and the place; the second gets the fade out. Null if either piece
+ * would be shorter than MIN_CLIP.
+ */
+export function splitClip(main: MainTimeline, id: string, t: number): { main: MainTimeline; second: string } | null {
+  const c = main.clips.find((x) => x.id === id);
+  if (!c) return null;
+  const length = clipLength(c);
+  if (t < MIN_CLIP || t > length - MIN_CLIP) return null;
+  const seg = (a: number, b: number) => sourceSlices(c.segments, a, b).map(([s, e]) => ({ id: newId(), start: s, end: e }));
+  const first = seg(0, t);
+  const rest = seg(t, length);
+  // a word belongs to the piece that plays it; a word cut inside the clip stays with the piece before it in the source
+  const at = outputToSourceAt(c.segments, t);
+  const inFirst = (w: (typeof c.words)[number]) => {
+    const m = sourceToOutput(c.segments, mid(w));
+    return m == null ? mid(w) < at : m < t;
+  };
+  const base = c.name.replace(/ \d+$/, '');
+  const n = Number(/ (\d+)$/.exec(c.name)?.[1] ?? 1);
+  const a: MainClip = { ...c, name: `${base} ${n}`, segments: first, words: c.words.filter(inFirst), fadeOut: 0 };
+  const b: MainClip = {
+    ...c,
+    id: newId('c'),
+    name: `${base} ${n + 1}`,
+    segments: rest,
+    words: c.words.filter((w) => !inFirst(w)),
+    fadeIn: 0,
+    gap: 0,
+    at: c.at + t,
+  };
+  const clips = main.clips.flatMap((x) => (x.id === id ? [a, b] : [x]));
+  return { main: { clips }, second: b.id };
+}
+
+/** A moment a dragged clip edge can snap to, with what it is (shown on the guide line). */
+export type SnapTarget = { t: number; label: string };
+
+/** Every clip edge except the dragged clip's own, plus the start and the playhead. */
+export function snapTargets(placed: Placed[], except: string, playhead: number | null): SnapTarget[] {
+  const out: SnapTarget[] = [{ t: 0, label: 'the start' }];
+  if (playhead != null && playhead > 0) out.push({ t: playhead, label: 'the playhead' });
+  for (const c of placed) {
+    if (c.id === except) continue;
+    out.push({ t: c.start, label: `start of ${c.name}` }, { t: c.start + c.length, label: `end of ${c.name}` });
+  }
+  return out;
+}
+
+/**
+ * Premiere-style snapping: if the clip's start or end (at `start`, `length` long) is within `tolerance`
+ * of a target, the shift that lines it up exactly, and the target. Nearest wins.
+ */
+export function snapMove(start: number, length: number, targets: SnapTarget[], tolerance: number): { shift: number; target: SnapTarget } | null {
+  let best: { shift: number; target: SnapTarget } | null = null;
+  for (const target of targets)
+    for (const edge of [start, start + length]) {
+      const shift = target.t - edge;
+      if (Math.abs(shift) <= tolerance && (!best || Math.abs(shift) < Math.abs(best.shift))) best = { shift, target };
+    }
+  return best;
 }
