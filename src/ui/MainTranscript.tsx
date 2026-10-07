@@ -8,6 +8,7 @@ import { isSpeech } from '../engine/types';
 import { paragraphs } from '../engine/view';
 import { useStore } from '../state/store';
 import { combo } from './keys';
+import { KIND_LABEL } from './kinds';
 import { KindIcon } from './Sidebar';
 import { RenameForm } from './Transcript';
 import { fmt, trackColor, useMixPlayhead } from './util';
@@ -142,14 +143,14 @@ function ClipText({
     <section className={`main-clip${on ? ' on' : ''}`}>
       <div className="cliphead">
         <KindIcon kind={c.kind} />
-        <button className="clip-name" onClick={() => st.selectClip(c.id)} title="Select this clip: its volume and fades show under the lanes">
-          {c.name}
+        {/* just the kind, so the transcript reads calmly; the rest is in the tooltip */}
+        <button
+          className="clip-name"
+          onClick={() => st.selectClip(c.id)}
+          title={[c.name, from && `from ${from}`, `starts at ${fmt(c.start)}`, Math.round(c.gap * 10) > 0 && `${Math.round(c.gap * 10) / 10} s pause before`, 'Click to select it'].filter(Boolean).join(' · ')}
+        >
+          {KIND_LABEL[c.kind]}
         </button>
-        <span className="muted">
-          {from ? `from ${from} · ` : ''}
-          {fmt(c.start)}
-          {c.gap > 0 ? ` · ${Math.round(c.gap * 10) / 10} s pause before` : ''}
-        </span>
         <span className="clip-arrows">
           <button className="ghost" disabled={first} onClick={() => st.moveClip(c.id, -1)} title="Earlier in the running order" aria-label={`Move ${c.name} earlier`}>
             ↑
