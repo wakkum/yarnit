@@ -472,8 +472,6 @@ kbd { font: 12px ui-monospace, monospace; border: 1px solid var(--line); border-
 .mclip.on { border-color: var(--accent); box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent) 35%, transparent); z-index: 2; }
 .mclip canvas { position: absolute; inset: 0; width: 100%; height: 100%; opacity: .75; }
 .mclip b { position: absolute; top: 1px; left: 5px; font-size: 11px; line-height: 15px; white-space: nowrap; pointer-events: none; text-shadow: 0 0 3px var(--panel), 0 0 3px var(--panel); }
-.mclip .fades { position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; }
-.mclip .fades polyline { fill: none; stroke: var(--fg); stroke-width: 1.5; stroke-dasharray: 4 3; opacity: .6; vector-effect: non-scaling-stroke; }
 .fade-handle { position: absolute; top: 0; width: 10px; height: 10px; margin: 0 -5px; border-radius: 2px; background: var(--accent); border: 1.5px solid var(--panel); cursor: ew-resize; z-index: 3; }
 .inspector { display: flex; align-items: center; gap: 10px 14px; flex-wrap: wrap; margin-top: 10px; padding: 8px 12px; border: 1px solid var(--line); border-radius: 10px; background: var(--bg); font-size: 12px; }
 .inspector button { padding: 3px 9px; font-size: 12px; }
@@ -536,8 +534,9 @@ kbd { font: 12px ui-monospace, monospace; border: 1px solid var(--line); border-
 .clip-menu kbd { margin-left: auto; }
 
 /* main timeline: volume keyframes and lowering under voice */
-.mclip .env-line { position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; z-index: 1; }
-.mclip .env-line polyline { fill: none; stroke: var(--fg); stroke-width: 1.6; vector-effect: non-scaling-stroke; opacity: .8; }
+/* the volume line: dashed, 100% in the middle of the clip, 200% at the top */
+.mclip .vol-line { position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; z-index: 1; }
+.mclip .vol-line polyline { fill: none; stroke: var(--fg); stroke-width: 1.5; stroke-dasharray: 4 3; vector-effect: non-scaling-stroke; opacity: .7; }
 .duck-band { position: absolute; top: 0; bottom: 0; pointer-events: none; background: repeating-linear-gradient(135deg, transparent 0 5px, color-mix(in srgb, var(--fg) 9%, transparent) 5px 7px); }
 .level-bar { position: absolute; height: 12px; transform: translateY(-50%); cursor: ns-resize; z-index: 2; }
 .level-bar:hover { background: linear-gradient(transparent 4px, color-mix(in srgb, var(--accent) 45%, transparent) 4px 8px, transparent 8px); }
@@ -564,3 +563,4 @@ kbd { font: 12px ui-monospace, monospace; border: 1px solid var(--line); border-
 .scrub-ruler, .mruler { cursor: ew-resize; touch-action: none; }
 .scrub-grip { position: absolute; top: -1px; width: 12px; height: 15px; margin-left: -6px; z-index: 5; background: var(--accent); clip-path: polygon(0 0, 100% 0, 100% 60%, 50% 100%, 0 60%); border-radius: 2px 2px 0 0; cursor: grab; }
 .scrub-ruler:active .scrub-grip, .mruler:active .scrub-grip { cursor: grabbing; }
+.mclip .vol-line.keyed polyline { stroke-dasharray: none; opacity: .85; }

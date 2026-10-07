@@ -18,6 +18,7 @@ import {
   makeClip,
   moveSpeechClip,
   partSegments,
+  placeSpeech,
   removeClips,
   snapMove,
   snapTargets,
@@ -309,5 +310,36 @@ describe('lowering music under voice', () => {
     const main = { clips: [clip('v', 'voiceover', 4), clip('m', 'music', 12, { at: 0 })] };
     expect(layout(main)[1].ducks).toBeUndefined();
     expect(duckLevel(2, layout(main)[1])).toBe(1);
+  });
+});
+
+describe('dragging a voice clip', () => {
+  const main = { clips: [clip('a', 'interview', 4), clip('b', 'voiceover', 2), clip('m', 'music', 10, { at: 1 })] };
+
+  it('moves ahead of a clip when dropped before its middle, with no pause when flush', () => {
+    const next = placeSpeech(main, 'b', 0);
+    expect(layout(next).filter((c) => c.kind !== 'music').map((c) => [c.id, c.start])).toEqual([['b', 0], ['a', 2]]);
+    expect(next.clips.find((c) => c.id === 'b')!.gap).toBe(0);
+  });
+
+  it('stays after it when dropped past its middle, the space becoming its pause', () => {
+    const next = placeSpeech(main, 'b', 6);
+    const placed = layout(next);
+    expect(placed.find((c) => c.id === 'b')!.start).toBe(6);
+    expect(next.clips.find((c) => c.id === 'b')!.gap).toBe(2);
+  });
+
+  it('fills a pause without pushing the clip after it', () => {
+    const next = placeSpeech({ clips: [clip('a', 'interview', 4, { gap: 5 }), clip('b', 'voiceover', 2)] }, 'b', 1);
+    expect(layout(next).map((c) => [c.id, c.start])).toEqual([['b', 1], ['a', 5]]);
+  });
+
+  it('pushes the clip after it along when there is no room', () => {
+    const next = placeSpeech({ clips: [clip('a', 'interview', 4, { gap: 1 }), clip('b', 'voiceover', 2)] }, 'b', 0);
+    expect(layout(next).map((c) => [c.id, c.start])).toEqual([['b', 0], ['a', 2]]);
+  });
+
+  it('leaves music where it is', () => {
+    expect(placeSpeech(main, 'b', 0).clips.find((c) => c.id === 'm')!.at).toBe(1);
   });
 });

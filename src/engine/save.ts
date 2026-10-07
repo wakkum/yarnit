@@ -120,7 +120,7 @@ function readKeys(c: MainClip): Pick<MainClip, 'keys' | 'levels'> {
   const { keys, levels } = c;
   if (!Array.isArray(keys) || !Array.isArray(levels) || !keys.length || levels.length !== keys.length + 1) return { keys: undefined, levels: undefined };
   if (![...keys, ...levels].every((v) => typeof v === 'number' && Number.isFinite(v))) return { keys: undefined, levels: undefined };
-  return { keys: [...keys].sort((a, b) => a - b).map((k) => Math.max(0, k)), levels: levels.map((l) => Math.max(0, Math.min(1, l))) };
+  return { keys: [...keys].sort((a, b) => a - b).map((k) => Math.max(0, k)), levels: levels.map((l) => Math.max(0, Math.min(MAX_GAIN, l))) };
 }
 
 function readMain(data: unknown): MainTimeline {

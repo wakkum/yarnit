@@ -9,7 +9,6 @@ import {
   clampFades,
   cutPoint,
   EMPTY_MAIN,
-  envelope,
   fadeGain,
   hasEnvelope,
   layout,
@@ -17,6 +16,7 @@ import {
   MAX_FADE,
   MAX_GAIN,
   moveKey,
+  placeSpeech,
   removeKey,
   setLevel,
   snapMove,
@@ -167,7 +167,7 @@ export function MainTimeline() {
             {phase === 'error'
               ? message
               : placed.length
-                ? 'Voice clips play one after another. Drag clips to move them; click one to cut it there or set its volume and fades.'
+                ? 'Voice clips play one after another: drag one past another to swap their order. Click a clip to cut it there or set its volume and fades.'
                 : 'Empty so far. Open a recording and use Send to main in the top bar.'}
           </span>
         )}
@@ -301,14 +301,17 @@ function Clip({
   const env = hasEnvelope(c);
   const keys = c.keys ?? [];
   const [readout, setReadout] = useState<{ x: number; y: number; text: string } | null>(null);
-  const envLine = useMemo(() => {
-    if (!env) return '';
-    const n = 160;
-    return Array.from({ length: n + 1 }, (_, i) => `${(i / n) * 100},${(1 - envelope((i / n) * c.length, c)) * 100}`).join(' ');
-  }, [env, c]);
+  // the volume line: 100% in the middle of the clip, MAX_GAIN at the top (fades, keyframes and lowering included)
+  const showLine = on || env;
+  const yOf = (v: number) => (1 - v / MAX_GAIN) * 100;
+  const volLine = useMemo(() => {
+    if (!showLine) return '';
+    const n = 200;
+    return Array.from({ length: n + 1 }, (_, i) => `${(i / n) * 100},${(1 - fadeGain((i / n) * c.length, c) / MAX_GAIN) * 100}`).join(' ');
+  }, [showLine, c]);
 
-  /** Drag a stretch's volume bar up or down, or a keyframe sideways; one undo step when let go. */
-  const dragEnv = (e: React.PointerEvent, what: { level: number } | { key: number }) => {
+  /** Drag the volume line up or down (a stretch, or the whole clip without keyframes), or a keyframe sideways. */
+  const dragEnv = (e: React.PointerEvent, what: { level: number } | { gain: true } | { key: number }) => {
     if (e.button !== 0) return;
     e.stopPropagation();
     e.preventDefault();
@@ -318,9 +321,10 @@ function Clip({
     const before: Main = mainOf(useStore.getState());
     let latest = before;
     const onMove = (ev: PointerEvent) => {
-      if ('level' in what) {
-        const v = Math.round(Math.max(0, Math.min(1, 1 - (ev.clientY - box.top) / box.height)) * 100) / 100;
-        latest = setLevel(before, c.id, what.level, v);
+      if ('level' in what || 'gain' in what) {
+        // the volume the pointer points at, in steps of 5%
+        const v = Math.round(Math.max(0, Math.min(1, 1 - (ev.clientY - box.top) / box.height)) * MAX_GAIN * 20) / 20;
+        latest = 'gain' in what ? updateClip(before, c.id, { gain: v }) : setLevel(before, c.id, what.level, c.gain > 0 ? v / c.gain : 0);
         setReadout({ x: ev.clientX - box.left, y: ev.clientY - box.top, text: `${Math.round(v * 100)}%` });
       } else {
         const t = ((ev.clientX - box.left) / box.width) * c.length;
@@ -360,22 +364,22 @@ function Clip({
       if (!moved && Math.abs(dx) < DRAG_PX) return;
       moved = true;
       const dt = dx * perPx;
-      let patch: Partial<Placed>;
+      let patch: Partial<Placed> | null = null;
       if (mode === 'move') {
-        // a voice clip can't start before the clip ahead of it ends (its pause can't go below 0)
-        const lowest = isSpeech(c.kind) ? c.start - c.gap : 0;
-        let start = Math.max(lowest, c.start + dt);
+        let start = Math.max(0, c.start + dt);
         const hit = useStore.getState().settings.snap && !ev.altKey ? snapMove(start, c.length, targets, SNAP_PX * perPx) : null;
-        if (hit) start = Math.max(lowest, start + hit.shift);
+        if (hit) start = Math.max(0, start + hit.shift);
         const lined = hit && [start, start + c.length].some((edge) => Math.abs(edge - hit.target.t) < 1e-6);
         onGuide(lined ? hit.target : null);
-        patch = isSpeech(c.kind) ? { gap: start - lowest } : { at: start };
+        // a voice clip can go anywhere: dragged past another, it changes places with it in the running order
+        if (isSpeech(c.kind)) latest = placeSpeech(before, c.id, start);
+        else patch = { at: start };
       } else
         patch =
           mode === 'in'
             ? { fadeIn: Math.min(MAX_FADE, Math.max(0, c.fadeIn + dt), c.length) }
             : { fadeOut: Math.min(MAX_FADE, Math.max(0, c.fadeOut - dt), c.length) };
-      latest = updateClip(before, c.id, patch);
+      if (patch) latest = updateClip(before, c.id, patch);
       st.previewMain(latest);
     };
     const onUp = (ev: PointerEvent) => {
@@ -408,10 +412,18 @@ function Clip({
       {c.ducks?.map(([a, b]) => (
         <span key={a} className="duck-band" style={{ left: `${(Math.max(0, a) / c.length) * 100}%`, width: `${((Math.min(c.length, b) - Math.max(0, a)) / c.length) * 100}%` }} />
       ))}
-      {env && (
-        <svg className="env-line" viewBox="0 0 100 100" preserveAspectRatio="none" aria-hidden>
-          <polyline points={envLine} />
+      {showLine && (
+        <svg className={`vol-line${keys.length ? ' keyed' : ''}`} viewBox="0 0 100 100" preserveAspectRatio="none" aria-hidden>
+          <polyline points={volLine} />
         </svg>
+      )}
+      {on && !keys.length && (
+        <span
+          className="level-bar"
+          style={{ left: 0, width: '100%', top: `${yOf(c.gain)}%` }}
+          onPointerDown={(e) => dragEnv(e, { gain: true })}
+          title={`Volume ${Math.round(c.gain * 100)}%. Drag the line up or down to change it.`}
+        />
       )}
       {keys.length > 0 &&
         (c.levels ?? []).map((l, i) => {
@@ -421,9 +433,9 @@ function Clip({
             <span
               key={`bar${i}`}
               className="level-bar"
-              style={{ left: `${(a / c.length) * 100}%`, width: `${((b - a) / c.length) * 100}%`, top: `${(1 - l) * 100}%` }}
+              style={{ left: `${(a / c.length) * 100}%`, width: `${((b - a) / c.length) * 100}%`, top: `${yOf(c.gain * l)}%` }}
               onPointerDown={(e) => dragEnv(e, { level: i })}
-              title={`${Math.round(l * 100)}%. Drag up or down to change the volume here.`}
+              title={`${Math.round(c.gain * l * 100)}%. Drag the line up or down to change the volume here.`}
             />
           );
         })}
@@ -431,7 +443,7 @@ function Clip({
         <span
           key={`key${j}`}
           className="keyframe"
-          style={{ left: `${(k / c.length) * 100}%`, top: `${(1 - envelope(k, c)) * 100}%` }}
+          style={{ left: `${(k / c.length) * 100}%`, top: `${yOf(fadeGain(k, c))}%` }}
           onPointerDown={(e) => dragEnv(e, { key: j })}
           onDoubleClick={(e) => {
             e.stopPropagation();
@@ -444,11 +456,6 @@ function Clip({
         <span className="env-readout" style={{ left: readout.x, top: readout.y }}>
           {readout.text}
         </span>
-      )}
-      {on && !env && (
-        <svg className="fades" viewBox="0 0 100 100" preserveAspectRatio="none" aria-hidden>
-          <polyline points={`0,100 ${(fi / c.length) * 100},${100 - (c.gain / MAX_GAIN) * 100} ${100 - (fo / c.length) * 100},${100 - (c.gain / MAX_GAIN) * 100} 100,100`} />
-        </svg>
       )}
       <b>{c.name}</b>
       {words && <ClipWords c={c} />}

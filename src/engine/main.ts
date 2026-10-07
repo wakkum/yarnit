@@ -407,9 +407,31 @@ export function moveKey(main: MainTimeline, id: string, j: number, t: number): M
   return updateClip(main, id, { keys: keys.map((k, i) => (i === j ? Math.max(lo, Math.min(hi, t)) : k)) });
 }
 
-/** Set the volume of stretch `i` (0 to 1). */
+/** Set the volume of stretch `i` (0 to MAX_GAIN, relative to the clip's volume). */
 export function setLevel(main: MainTimeline, id: string, i: number, level: number): MainTimeline {
   const c = main.clips.find((x) => x.id === id);
   if (!c?.levels || i < 0 || i >= c.levels.length) return main;
-  return updateClip(main, id, { levels: c.levels.map((l, k) => (k === i ? Math.max(0, Math.min(1, level)) : l)) });
+  return updateClip(main, id, { levels: c.levels.map((l, k) => (k === i ? Math.max(0, Math.min(MAX_GAIN, level)) : l)) });
+}
+
+/**
+ * Drop a voice clip so it starts at main time `start`: it goes into the running order before the
+ * first other voice clip whose middle is later (so dragging it left past a clip moves it ahead of
+ * that clip), and the space left before it becomes its pause. Dropped into a pause, it fills it;
+ * otherwise the clips after it move along.
+ */
+export function placeSpeech(main: MainTimeline, id: string, start: number): MainTimeline {
+  const c = main.clips.find((x) => x.id === id);
+  if (!c || !isSpeech(c.kind)) return main;
+  const rest = main.clips.filter((x) => x.id !== id);
+  const others = layout({ clips: rest }).filter((x) => isSpeech(x.kind));
+  const i = others.filter((x) => x.start + x.length / 2 < start).length;
+  const prevEnd = i > 0 ? others[i - 1].start + others[i - 1].length : 0;
+  const moved = { ...c, gap: Math.max(0, start - prevEnd) };
+  // put it back in the array just before the speech clip it now precedes (music keeps its place);
+  // dropped into that clip's pause, it uses up the pause, so the clip stays where it was if it can
+  const next = others[i];
+  const nextGap = next ? Math.max(0, next.start - (start + clipLength(c))) : 0;
+  const clips = next ? rest.flatMap((x) => (x.id === next.id ? [moved, { ...x, gap: Math.min(x.gap, nextGap) }] : [x])) : [...rest, moved];
+  return { clips };
 }

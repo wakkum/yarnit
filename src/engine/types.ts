@@ -100,7 +100,7 @@ export type MainClip = {
   at: number;
   /**
    * Volume keyframes: clip times (seconds, ascending) that split the clip into stretches, and the
-   * volume of each stretch (0 to 1, one more than `keys`). The volume eases from one to the next.
+   * volume of each stretch (0 to 2 times the clip's volume, one more than `keys`). The volume eases from one to the next.
    */
   keys?: number[];
   levels?: number[];

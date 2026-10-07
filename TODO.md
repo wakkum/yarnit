@@ -47,6 +47,7 @@
 - [x] Main timeline: volume keyframes with eased changes, Lower under voice for music and effects; lanes reordered to Voice-over, Interview, Music, Sound effect (7 Oct 2026)
 - [x] Main timeline: focus one clip (double-click, Z): zoomed, tall, words under the waveform (7 Oct 2026)
 - [x] Scrub grip on the playhead, both timelines (7 Oct 2026)
+- [x] Drag voice clips anywhere (reorders the running order), Send to main in the selection bar, volume on the dashed line (7 Oct 2026)
 - [ ] Scrub audio while dragging the playhead (short snippets), if wanted
 - [ ] Main timeline: trim a clip by dragging its edges
 - [ ] Main timeline: show which clips are out of date after their recording was edited, with a Replace option

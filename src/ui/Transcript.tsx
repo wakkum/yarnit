@@ -343,6 +343,7 @@ function SelectionBar({ inner }: { inner: React.RefObject<HTMLDivElement | null>
   const selection = useStore((s) => s.selection);
   const clipboard = useStore((s) => s.clipboard);
   const recording = useStore((s) => s.recording);
+  const transcribed = useStore((s) => s.transcribed);
   const [pos, setPos] = useState<{ left: number; top: number; transform?: string } | null>(null);
   const bar = useRef<HTMLDivElement>(null);
 
@@ -407,6 +408,14 @@ function SelectionBar({ inner }: { inner: React.RefObject<HTMLDivElement | null>
           ))}
           <button className="unmark" onClick={() => st.highlightSelection(null)} title="Remove highlight (0)" aria-label="Remove highlight">
             ⌀
+          </button>
+          <span className="sep" />
+          <button
+            onClick={() => st.sendToMain({ type: 'selection' })}
+            disabled={!transcribed}
+            title={transcribed ? 'Copy the selected words to the main timeline as a clip' : 'Wait for the transcript to finish'}
+          >
+            Send to main
           </button>
         </>
       )}
