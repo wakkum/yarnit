@@ -546,3 +546,16 @@ kbd { font: 12px ui-monospace, monospace; border: 1px solid var(--line); border-
 .env-readout { position: absolute; z-index: 4; transform: translate(8px, -50%); padding: 0 5px; border-radius: 4px; background: var(--fg); color: var(--bg); font-size: 10px; line-height: 15px; white-space: nowrap; pointer-events: none; }
 .insp-duck { display: inline-flex; align-items: center; gap: 6px; }
 .insp-duck input[type=range] { width: 90px; }
+
+/* main timeline: focus one clip (mockups/zoomclip-b-focus.html) */
+.focus-bar { display: flex; align-items: center; gap: 10px; margin-bottom: 8px; font-size: 12px; }
+.focus-bar b { font-size: 13px; }
+.focus-bar button { padding: 3px 10px; font-size: 12px; }
+.mlane.slim .lane-head { padding-top: 0; padding-bottom: 0; min-height: 0; justify-content: center; }
+.mlane.slim .lane-head .muted, .mlane.slim .lane-head .ico { display: none; }
+.mlane.slim .lane-head b { font-size: 11px; font-weight: 500; }
+.mlane.slim .mclip b, .mlane.slim .mclip .fade-handle, .mlane.slim .mclip .keyframe, .mlane.slim .mclip .level-bar { display: none; }
+.mlane.slim .lane-empty { display: none; }
+.mlane.big .mclip b { font-size: 12px; top: 3px; }
+.clip-words { position: absolute; left: 0; right: 0; bottom: 5px; height: 35px; z-index: 2; pointer-events: none; }
+.clip-words span { position: absolute; bottom: 0; overflow: hidden; white-space: nowrap; padding: 0 3px; border-radius: 3px; font-size: 11px; line-height: 17px; background: color-mix(in srgb, var(--panel) 82%, transparent); }

@@ -1,0 +1,71 @@
+<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>Zoom A: taller lane</title><style>
+:root{--bg:#fbfaf8;--panel:#fff;--fg:#1c1b1a;--muted:#76716b;--line:#e6e2dc;--accent:#2f6fde;--sel:#cfe0ff;--int:#2f6fde;--vo:#2e8b57;--mus:#8a4fd1;--sfx:#c2620f;--snap:#e0a020;font-family:Inter,system-ui,-apple-system,sans-serif;color-scheme:light}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){--bg:#151514;--panel:#1d1d1b;--fg:#ecebe8;--muted:#9a958e;--line:#34332f;--accent:#6b9bff;--sel:#3d6ee0;--int:#6b9bff;--vo:#5fcf8f;--mus:#b893f5;--sfx:#f0974a;--snap:#ffc43d;color-scheme:dark}}
+:root[data-theme="dark"]{--bg:#151514;--panel:#1d1d1b;--fg:#ecebe8;--muted:#9a958e;--line:#34332f;--accent:#6b9bff;--sel:#3d6ee0;--int:#6b9bff;--vo:#5fcf8f;--mus:#b893f5;--sfx:#f0974a;--snap:#ffc43d;color-scheme:dark}
+*{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--fg);font-size:14px;padding:0 16px}
+.note{max-width:1000px;margin:16px auto;padding:12px 16px;border:1px dashed var(--line);border-radius:10px;color:var(--muted);line-height:1.55}.note b{color:var(--fg)}
+.cap{max-width:1000px;margin:18px auto 6px;font-size:12px;color:var(--muted);font-weight:600;text-transform:uppercase;letter-spacing:.06em}
+.tl{position:relative;max-width:1000px;margin:0 auto;border:1px solid var(--line);border-radius:12px;background:var(--panel);padding:12px 16px 16px}
+.tr{display:flex;align-items:center;gap:10px;margin-bottom:8px;font-size:13px}
+.play{width:30px;height:30px;border-radius:50%;background:var(--accent);color:#fff;display:grid;place-items:center;font-size:11px}
+.mono{font-family:ui-monospace,monospace}
+button{font:inherit;font-size:12px;padding:4px 10px;border-radius:7px;border:1px solid var(--line);background:var(--panel);color:var(--fg)}
+button.primary{background:var(--accent);border-color:var(--accent);color:#fff}
+button.on{background:var(--sel);border-color:var(--accent)}
+.sp{margin-left:auto}
+.ruler{position:relative;height:16px;margin-left:116px;font-size:10px;color:var(--muted)}
+.ruler span{position:absolute;top:0}
+.lanes{position:relative}
+.lane{display:grid;grid-template-columns:110px 1fr;gap:6px;margin-bottom:5px}
+.lh{font-size:12px;font-weight:600;padding:9px 8px;border:1px solid var(--line);border-left:3px solid var(--c);border-radius:8px}
+.lb{position:relative;height:42px;border:1px solid var(--line);border-radius:8px;background:var(--bg)}
+.clip{position:absolute;top:3px;bottom:3px;border-radius:6px;border:1.5px solid var(--c);background:color-mix(in srgb,var(--c) 15%,var(--panel));overflow:hidden}
+.clip b{position:absolute;left:5px;top:2px;font-size:11px}
+.clip i{position:absolute;inset:16px 3px 3px;background:repeating-linear-gradient(90deg,color-mix(in srgb,var(--c) 70%,transparent) 0 2px,transparent 2px 4px);opacity:.6}
+.clip.sel{outline:2px solid var(--accent);outline-offset:1px}
+.clip.ghost{opacity:.55;border-style:dashed}
+.ph{position:absolute;top:-16px;bottom:0;width:2px;background:var(--accent);z-index:3}
+.guide{position:absolute;top:-16px;bottom:-4px;width:0;border-left:2px dashed var(--snap);z-index:4}
+.guide span{position:absolute;top:-2px;left:4px;background:var(--snap);color:#1c1b1a;font-size:10px;font-weight:600;padding:1px 6px;border-radius:4px;white-space:nowrap}
+.cutline{position:absolute;top:0;bottom:0;width:0;border-left:2px solid var(--fg);z-index:3}
+.cutline:after{content:'✂';position:absolute;top:-2px;left:-7px;font-size:12px}
+.pop{position:absolute;z-index:6;background:var(--panel);border:1px solid var(--line);border-radius:10px;box-shadow:0 10px 30px rgba(0,0,0,.18);padding:6px;font-size:12px;min-width:200px}
+.pop .row{display:flex;align-items:center;gap:8px;padding:6px 8px;border-radius:6px}
+.pop .row.hot{background:var(--sel)}
+.pop .row small{margin-left:auto;color:var(--muted)}
+.pop .t{padding:4px 8px 6px;color:var(--muted);font-size:11px;border-bottom:1px solid var(--line);margin-bottom:4px}
+.hint{font-size:12px;color:var(--muted);margin-top:8px}
+kbd{font-family:ui-monospace,monospace;font-size:11px;border:1px solid var(--line);border-bottom-width:2px;border-radius:4px;padding:0 4px}
+.cursor{position:absolute;z-index:5;font-size:16px}
+
+.env{position:absolute;inset:0;width:100%;height:100%;overflow:visible}
+.env polyline{fill:none;stroke:var(--fg);stroke-width:1.6;vector-effect:non-scaling-stroke}
+.env .auto{stroke:var(--fg);stroke-dasharray:3 3;opacity:.55}
+.kf{position:absolute;width:10px;height:10px;margin:-5px;border-radius:50%;background:var(--panel);border:2px solid var(--fg);z-index:3}
+.kf.sel{background:var(--accent);border-color:var(--accent);box-shadow:0 0 0 3px color-mix(in srgb,var(--accent) 30%,transparent)}
+.duck{position:absolute;top:0;bottom:0;background:repeating-linear-gradient(135deg,transparent 0 5px,color-mix(in srgb,var(--fg) 7%,transparent) 5px 7px)}
+.insp{max-width:1000px;margin:8px auto 0;border:1px solid var(--line);border-radius:10px;padding:8px 12px;background:var(--bg);font-size:12px;display:flex;flex-wrap:wrap;gap:10px 16px;align-items:center}
+.insp b{font-size:13px}
+.sw{display:inline-flex;align-items:center;gap:6px}.sw i{width:28px;height:16px;border-radius:8px;background:var(--accent);position:relative}.sw i:after{content:'';position:absolute;right:2px;top:2px;width:12px;height:12px;border-radius:50%;background:#fff}
+.sw.off i{background:var(--line)}.sw.off i:after{left:2px;right:auto}
+input[type=range]{width:110px}
+.tag{position:absolute;font-size:10px;background:var(--panel);border:1px solid var(--line);border-radius:4px;padding:0 4px;white-space:nowrap;z-index:3}
+.tall .lb{height:110px}
+.grid{position:absolute;left:0;right:0;border-top:1px dashed var(--line);font-size:9px;color:var(--muted)}
+.grid span{position:absolute;left:3px;top:-6px;background:var(--bg);padding:0 2px}
+.kfl{width:100%;border-collapse:collapse;font-size:12px}.kfl td{padding:3px 6px;border-top:1px solid var(--line)}
+
+.lb.big{height:170px}.lb.slim{height:16px}
+.lh .x{float:right;color:var(--muted);font-weight:400}
+.clip .wv{position:absolute;inset:18px 4px 6px;background:repeating-linear-gradient(90deg,color-mix(in srgb,var(--c) 75%,transparent) 0 2px,transparent 2px 4px);mask:linear-gradient(90deg,#000,#000);-webkit-mask:radial-gradient(ellipse 120% 60% at 50% 50%,#000 40%,transparent 75%);opacity:.75}
+.words{position:absolute;left:4px;right:4px;bottom:6px;display:flex;gap:2px;font-size:11px;z-index:2}
+.words span{background:color-mix(in srgb,var(--panel) 85%,transparent);border-radius:3px;padding:0 3px;white-space:nowrap}
+.words span.cut{text-decoration:line-through;color:var(--muted)}
+.grab{position:absolute;left:0;right:0;bottom:-4px;height:8px;cursor:ns-resize}
+.grab:after{content:'';position:absolute;left:50%;top:3px;width:28px;height:3px;margin-left:-14px;border-radius:2px;background:var(--muted)}
+.crumb{display:flex;align-items:center;gap:8px;margin:0 0 8px;font-size:12px}
+.crumb b{font-size:13px}
+.editor{max-width:1000px;margin:10px auto 0;border:1px solid var(--line);border-radius:12px;background:var(--panel);padding:12px 16px}
+.editor .bigw{position:relative;height:200px;border:1px solid var(--line);border-radius:8px;background:color-mix(in srgb,var(--int) 8%,var(--panel));overflow:hidden}
+.mini{display:flex;gap:4px;margin-top:8px;height:16px}.mini i{flex:1;border-radius:3px;background:var(--line)}.mini i.on{background:var(--accent)}
+</style></head><body><div class="note"><b>A. Make one lane taller.</b> Each lane head gets a small ▾ / ▴ toggle that makes that lane four times as tall, or drag the handle under a lane to any height. A tall voice lane shows a big waveform with the words written under it (cut words crossed out), so you can see exactly where to cut or put a keyframe. Horizontal zoom (− + Fit) works as now. Several lanes can be tall at once; the heights are remembered.<br><br><b>In every option:</b> cutting, keyframes and snapping work the same in the bigger view, and music and effects get the bigger waveform too (without words).</div><div class="cap">Interview lane made tall (the others stay as they are)</div><div class="tl"><div class="tr"><span class="play">▶</span><span class="mono">0:12.4 / 0:46</span><span class="sp"></span><button class="on">Snap</button><button>−</button><button>1×</button><button>+</button><button>Fit</button></div><div class="ruler"><span style="left:0.0%">0:00</span><span style="left:10.0%">0:05</span><span style="left:20.0%">0:10</span><span style="left:30.0%">0:15</span><span style="left:40.0%">0:20</span><span style="left:50.0%">0:25</span><span style="left:60.0%">0:30</span><span style="left:70.0%">0:35</span><span style="left:80.0%">0:40</span><span style="left:90.0%">0:45</span></div><div class="lanes"><div class="lane"><div class="lh" style="--c:var(--vo)">Voice-over</div><div class="lb "><div class="clip " style="--c:var(--vo);left:0%;width:13%"><b>Intro VO</b><i></i></div><div class="clip " style="--c:var(--vo);left:62%;width:14%"><b>Outro VO</b><i></i></div></div></div><div class="lane"><div class="lh" style="--c:var(--int)">Interview<span class="x" title="Make this lane taller">▴</span></div><div class="lb big"><div class="clip sel" style="--c:var(--int);left:14%;width:44%"><b>Interview with Omar</b><span class=wv></span><div class="words"><span class="">Notes.</span><span class="cut">Um,</span><span class="">today</span><span class="">I</span><span class="">have</span><span class="">Omar</span><span class="">with</span><span class="">me,</span><span class="">who</span><span class="">spent</span><span class="">three</span><span class="">months</span><span class="">on</span><span class="">the</span><span class="">coast</span></div></div><span class="grab"></span></div></div><div class="lane"><div class="lh" style="--c:var(--mus)">Music</div><div class="lb "><div class="clip " style="--c:var(--mus);left:0%;width:90%"><b>Theme bed</b><i></i></div></div></div><div class="lane"><div class="lh" style="--c:var(--sfx)">Sound effect</div><div class="lb "><div class="clip " style="--c:var(--sfx);left:13%;width:3%"><b>Gull</b><i></i></div></div></div></div></div><div style="height:30px"></div></body></html>

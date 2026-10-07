@@ -24,6 +24,7 @@ import {
   updateClip,
   type Placed,
   type SnapTarget,
+  wordTimes,
 } from '../engine/main';
 import { isSpeech, RECORDING_KINDS, type MainTimeline as Main, type RecordingKind } from '../engine/types';
 import { editedPieces, tickStep, type ZoomView } from '../engine/view';
@@ -39,8 +40,10 @@ const LANE_COLOR: Record<RecordingKind, string> = { interview: 'var(--sp1)', voi
 /** Lane order, top to bottom (user's choice, 7 Oct 2026). */
 const LANES: RecordingKind[] = ['voiceover', 'interview', 'music', 'sfx'];
 const DRAG_PX = 4;
-/** Height of one row of clips in a lane, px. */
+/** Height of one row of clips in a lane, px: normal, the focused clip's lane, the other lanes while focused. */
 const ROW = 44;
+const BIG_ROW = 190;
+const SLIM_ROW = 16;
 const WHEEL_ZOOM = 0.006;
 /** How close, in px, a dragged edge must come to snap. */
 const SNAP_PX = 8;
@@ -60,6 +63,7 @@ export function MainTimeline() {
   const selected = useStore((s) => s.mainClip);
   const peaks = useStore((s) => s.peaks);
   const snap = useStore((s) => s.settings.snap);
+  const focus = useStore((s) => s.mainFocus);
   const { togglePlay, seekMain, setZoom, zoomBy, selectClip, setSettings } = useStore.getState();
   const [guide, setGuide] = useState<SnapTarget | null>(null);
   const [menu, setMenu] = useState<ClipMenu | null>(null);
@@ -115,6 +119,8 @@ export function MainTimeline() {
   }, []);
 
   const working = phase === 'decoding' || phase === 'exporting';
+  const focused = focus ? placed.find((c) => c.id === focus.id) : undefined;
+  const rowH = (kind: RecordingKind) => (!focused ? ROW : kind === focused.kind ? BIG_ROW : SLIM_ROW);
   const counts = Object.fromEntries(RECORDING_KINDS.map((k) => [k, placed.filter((c) => c.kind === k).length])) as Record<RecordingKind, number>;
   // clips that overlap in one lane (music under music) stack in rows, so none hides another
   const rows = useMemo(
@@ -130,7 +136,16 @@ export function MainTimeline() {
   );
 
   return (
-    <section className="timeline main-timeline">
+    <section className={`timeline main-timeline${focused ? ' focused' : ''}`}>
+      {focused && (
+        <div className="focus-bar">
+          <button onClick={() => useStore.getState().focusClip(null)}>← Back to all</button>
+          <b>{focused.name}</b>
+          <span className="muted">
+            {fmt(focused.start)} to {fmt(focused.start + focused.length)} · double-click it or press Esc to go back
+          </span>
+        </div>
+      )}
       <div className="transport">
         <button className="play" onClick={togglePlay} aria-label={playing ? 'Pause' : 'Play'} title="Play/pause (Space)" disabled={!placed.length}>
           {playing ? '❚❚' : '▶'}
@@ -189,7 +204,7 @@ export function MainTimeline() {
           )}
         </div>
         {LANES.map((kind, i) => (
-          <div className="lane mlane" key={kind}>
+          <div className={`lane mlane${focused ? (kind === focused.kind ? ' big' : ' slim') : ''}`} key={kind}>
             <div className="lane-head" style={{ borderLeftColor: LANE_COLOR[kind] }}>
               <b>
                 <KindIcon kind={kind} /> {KIND_LABEL[kind]}
@@ -198,7 +213,7 @@ export function MainTimeline() {
             </div>
             <div
               className="lane-body mlane-body"
-              style={{ height: ROW * Math.max(1, rows[kind].count) + 6 }}
+              style={{ height: rowH(kind) * Math.max(1, rows[kind].count) + 6 }}
               onPointerDown={(e) => {
                 if (e.target !== e.currentTarget) return;
                 selectClip(null);
@@ -213,7 +228,9 @@ export function MainTimeline() {
                     c={c}
                     left={pct(c.start)}
                     width={len(c.length)}
-                    top={3 + ROW * (rows[kind].row.get(c.id) ?? 0)}
+                    top={3 + rowH(kind) * (rows[kind].row.get(c.id) ?? 0)}
+                    height={rowH(kind) - 4}
+                    words={c.id === focused?.id && isSpeech(c.kind)}
                     view={view}
                     on={c.id === selected}
                     peaks={peaks[c.trackId]}
@@ -254,6 +271,8 @@ function Clip({
   cutAt,
   onGuide,
   onMenu,
+  height,
+  words,
 }: {
   c: Placed;
   left: string;
@@ -267,6 +286,9 @@ function Clip({
   cutAt: number | null;
   onGuide: (g: SnapTarget | null) => void;
   onMenu: (m: ClipMenu | null) => void;
+  height: number;
+  /** Write the clip's words under its waveform (the focused voice clip). */
+  words: boolean;
 }) {
   const pieces = useMemo(() => editedPieces(c.segments).map((p) => ({ ...p, moved: false })), [c.segments]);
   const source = media.mainBuffers.get(c.trackId)?.duration ?? Math.max(...c.segments.map((s) => s.end));
@@ -369,8 +391,14 @@ function Clip({
   return (
     <div
       className={`mclip${on ? ' on' : ''}${isSpeech(c.kind) ? ' speech' : ''}`}
-      style={{ left, width, top, height: ROW - 4, ['--c' as string]: color }}
+      style={{ left, width, top, height, ['--c' as string]: color }}
       onPointerDown={(e) => drag(e, 'move')}
+      onDoubleClick={(e) => {
+        e.stopPropagation();
+        onMenu(null);
+        const st = useStore.getState();
+        st.focusClip(st.mainFocus?.id === c.id ? null : c.id);
+      }}
       title={`${c.name}: ${fmt(c.start)} to ${fmt(c.start + c.length)}, volume ${Math.round(c.gain * 100)}%. Drag to move, click to cut.`}
     >
       <Waveform peaks={peaks} color={color} source={source} length={c.length} pieces={pieces} level={level} />
@@ -420,6 +448,7 @@ function Clip({
         </svg>
       )}
       <b>{c.name}</b>
+      {words && <ClipWords c={c} />}
       {cutAt != null && <span className="cut-mark" style={{ left: `${(cutAt / c.length) * 100}%` }} />}
       {on && (
         <>
@@ -603,6 +632,9 @@ function ClipMenuPop({ menu, c, close }: { menu: ClipMenu; c: Placed; close: () 
               st.selectClip(c.id);
             }
           })}
+      {useStore.getState().mainFocus?.id === c.id
+        ? item('Back to all', () => st.focusClip(null), 'Z')
+        : item('Zoom to clip', () => st.focusClip(c.id), 'Z')}
       {item('▶ Play from here', () => {
         st.seekMain(at);
         if (!useStore.getState().playing) st.togglePlay();
@@ -611,6 +643,25 @@ function ClipMenuPop({ menu, c, close }: { menu: ClipMenu; c: Placed; close: () 
         st.selectClip(c.id);
         requestAnimationFrame(() => document.querySelector<HTMLInputElement>('.inspector .insp-vol input')?.focus());
       })}
+    </div>
+  );
+}
+
+/** The focused voice clip's words, each written at the moment it is spoken, under the waveform. */
+function ClipWords({ c }: { c: Placed }) {
+  const words = useMemo(() => wordTimes([{ ...c, start: 0 }]), [c]);
+  const text = useMemo(() => new Map(c.words.map((w) => [w.id, w.text])), [c.words]);
+  return (
+    <div className="clip-words" aria-hidden>
+      {words.map((w, i) => (
+        <span
+          key={w.id}
+          // two staggered rows: each word has room up to the one after next
+          style={{ left: `${(w.at / c.length) * 100}%`, bottom: i % 2 ? 18 : 0, maxWidth: `${(((words[i + 2]?.at ?? c.length) - w.at) / c.length) * 100}%` }}
+        >
+          {text.get(w.id)}
+        </span>
+      ))}
     </div>
   );
 }

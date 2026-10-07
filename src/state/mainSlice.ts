@@ -26,7 +26,7 @@ import {
 } from '../engine/main';
 import { snapToQuiet } from '../engine/render';
 import { isSpeech, type HighlightColor, type MainClip, type MainTimeline } from '../engine/types';
-import { computePeaks } from '../engine/view';
+import { computePeaks, type ZoomView } from '../engine/view';
 import * as library from './library';
 import { media } from './media';
 import type { State } from './store';
@@ -44,6 +44,10 @@ export type MainSlice = {
   mainFuture: MainTimeline[];
   /** The selected clip; its volume and fades show under the lanes. */
   mainClip: string | null;
+  /** Focus (mockups/zoomclip-b-focus.html): one clip zoomed to fill the view, its lane tall; `back` is the zoom to return to. */
+  mainFocus: { id: string; back: ZoomView | null } | null;
+  /** Focus a clip, or with null go back to the whole timeline. */
+  focusClip: (id: string | null) => void;
   /** Where sent music and effects land: the main timeline's playhead when it was last open. */
   mainPlayhead: number;
   openMain: () => Promise<void>;
@@ -136,6 +140,7 @@ export function createMainSlice(set: (p: Partial<State>) => void, get: () => Sta
     mainPast: [],
     mainFuture: [],
     mainClip: null,
+    mainFocus: null,
     mainPlayhead: 0,
 
     async openMain() {
@@ -237,9 +242,25 @@ export function createMainSlice(set: (p: Partial<State>) => void, get: () => Sta
     removeClip(id) {
       get().commitMain(removeClips(mainOf(get()), [id]));
       if (get().mainClip === id) set({ mainClip: null });
+      if (get().mainFocus?.id === id) get().focusClip(null);
     },
 
     selectClip: (mainClip) => set({ mainClip }),
+
+    focusClip(id) {
+      const focus = get().mainFocus;
+      if (!id) {
+        if (focus) set({ mainFocus: null });
+        if (focus) get().setZoom(focus.back);
+        return;
+      }
+      const c = layout(mainOf(get())).find((x) => x.id === id);
+      if (!c) return;
+      // a little room either side, so its edges and what plays next to it show
+      const pad = Math.max(0.2, c.length * 0.04);
+      set({ mainFocus: { id, back: focus ? focus.back : get().zoom }, mainClip: id });
+      get().setZoom({ start: Math.max(0, c.start - pad), span: c.length + 2 * pad });
+    },
 
     cutClip(id, t) {
       const main = mainOf(get());

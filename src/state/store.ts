@@ -290,6 +290,7 @@ export const FRESH = {
   selection: [],
   moved: null,
   zoom: null,
+  mainFocus: null,
   past: [],
   future: [],
   clipboard: [],
@@ -941,7 +942,7 @@ function leaveMain(set: (p: Partial<State>) => void) {
   media.mix?.pause();
   media.mainBuffers.clear();
   media.mainPeaks.clear();
-  set({ mainOpen: false, mainPast: [], mainFuture: [], mainClip: null, mainPlayhead: 0 });
+  set({ mainOpen: false, mainPast: [], mainFuture: [], mainClip: null, mainFocus: null, mainPlayhead: 0 });
 }
 
 /** Length of what the timeline shows: the open recording's edit, or the main timeline. */

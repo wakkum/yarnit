@@ -31,6 +31,7 @@ const KEYS: [string, ReactNode][] = [
   ['Main timeline: select a clip', <>Click it to set its volume, fades and the pause before it. Drag a music or effect clip to move it, drag the small squares to set its fades. <kbd>Esc</kbd> deselects</>],
   ['Main timeline: cut a clip in two', <>Click the spot on the clip, then <b>Cut here</b>, or select the clip and press <kbd>C</kbd> to cut at the playhead. A voice clip is cut in the nearest pause between words</>],
   ['Main timeline: snapping', <>Dragged clips snap to the edges of every other clip and to the playhead, with a yellow line. <kbd>S</kbd> or the Snap button turns it off; hold <kbd>Alt</kbd> while dragging to skip it once</>],
+  ['Main timeline: zoom into one clip', <>Double-click a clip (or <b>Zoom to clip</b> in its menu, or <kbd>Z</kbd>). It fills the view, its lane grows tall with the words under the waveform, and the other lanes fold to thin strips. <kbd>Esc</kbd>, <kbd>Z</kbd> or <b>Back to all</b> returns</>],
   ['Main timeline: volume inside a clip', <>Click a clip, then <b>Add keyframe</b>. Two keyframes make a stretch between them: drag its line down (or up) to change the volume there, and it eases in and out. Drag a keyframe sideways to move it, double-click it to remove it. On music, <b>Lower under voice</b> in the clip settings does this for you wherever someone speaks</>],
   ['Main timeline: cut words', <>Select words in a clip's transcript and press <kbd>Delete</kbd>. Only that clip changes, not the recording</>],
   ['Clear selection, cut or search', <><kbd>Esc</kbd></>],

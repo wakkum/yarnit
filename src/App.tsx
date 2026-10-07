@@ -77,6 +77,13 @@ export default function App() {
         e.preventDefault();
         if (st.mainClip) st.cutClip(st.mainClip, st.mainTime());
         else st.setNotice('Select a clip first, then press C to cut it at the playhead.');
+      } else if (st.mainOpen && !mod && !e.altKey && e.key.toLowerCase() === 'z') {
+        // focus the selected clip, or go back to the whole timeline
+        e.preventDefault();
+        if (st.mainFocus) st.focusClip(null);
+        else if (st.mainClip) st.focusClip(st.mainClip);
+      } else if (e.key === 'Escape' && st.mainFocus) {
+        st.focusClip(null);
       } else if (st.mainOpen && !mod && !e.altKey && e.key.toLowerCase() === 's') {
         e.preventDefault();
         st.setSettings({ snap: !st.settings.snap });
