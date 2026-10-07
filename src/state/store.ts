@@ -10,6 +10,7 @@ import {
   findPauses,
   fullSegments,
   isFillerText,
+  retypeWord,
   moveWords as moveInEdit,
   newId,
   outputDuration,
@@ -212,6 +213,8 @@ export type State = MainSlice & {
   /** Shorten the given pauses (default: all over settings.pauseMin) to settings.pauseKeep. */
   shortenPauses: (pauses?: Pause[]) => void;
   renameSpeaker: (id: string, name: string) => void;
+  /** Correct a misheard word's text (undoable); not while this recording is still being transcribed. */
+  retypeWord: (id: string, text: string) => void;
   /** Relabel words; 'new' creates the next "Speaker N". Returns the speaker id used. */
   assignSpeaker: (wordIds: string[], speakerId: string | 'new') => string | undefined;
   refreshLibrary: () => Promise<void>;
@@ -793,6 +796,14 @@ export const useStore = create<State>((set, get) => ({
     if (!recording) return;
     const list = pauses ?? findPauses(displayWords(recording.words, recording.segments), recording.segments, settings.pauseMin);
     if (list.length) get().applyEdit(shortenInEdit(recording.segments, list, settings.pauseKeep));
+  },
+
+  retypeWord(id, text) {
+    const { recording, transcribing } = get();
+    if (!recording) return;
+    if (transcribing?.id === recording.id) return get().setNotice('Words can be corrected once the transcript is finished.');
+    const words = retypeWord(recording.words, id, text);
+    if (words !== recording.words) commit(set, get, { words });
   },
 
   renameSpeaker(id, name) {

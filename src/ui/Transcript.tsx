@@ -41,6 +41,8 @@ const Word = memo(function Word({
   color,
   wave,
   onPick,
+  editing,
+  onEdit,
 }: {
   d: DisplayWord;
   index: number;
@@ -52,6 +54,8 @@ const Word = memo(function Word({
   color?: { color: HighlightColor; joinNext: boolean };
   wave: boolean;
   onPick: (i: number, shift: boolean) => void;
+  editing: boolean;
+  onEdit: (id: string | null) => void;
 }) {
   const cls = ['w'];
   if (color && !d.deleted) cls.push('hl', `hl-${color.color}`);
@@ -66,9 +70,25 @@ const Word = memo(function Word({
   }
   return (
     <>
-      <span className={cls.join(' ')} data-wid={d.word.id} onClick={(e) => onPick(index, e.shiftKey)}>
-        {d.word.text}
-      </span>
+      {editing ? (
+        <WordInput
+          text={d.word.text}
+          done={(text) => {
+            if (text != null) useStore.getState().retypeWord(d.word.id, text);
+            onEdit(null);
+          }}
+        />
+      ) : (
+        <span
+          className={cls.join(' ')}
+          data-wid={d.word.id}
+          onClick={(e) => onPick(index, e.shiftKey)}
+          onDoubleClick={() => !d.deleted && onEdit(d.word.id)}
+          title={d.deleted ? undefined : 'Double-click to correct this word'}
+        >
+          {d.word.text}
+        </span>
+      )}
       {/* the space inside a selection is highlighted too, so a selection reads as one block */}
       {sel && !sel.last ? (
         <span className="gap sel"> </span>
@@ -80,6 +100,38 @@ const Word = memo(function Word({
     </>
   );
 });
+
+/**
+ * Inline box to correct a misheard word, in place of the word: Enter or clicking away keeps the text,
+ * Esc cancels (`done(null)`). Keys stay in the box, so Delete or Space don't also edit the audio.
+ */
+export function WordInput({ text, done }: { text: string; done: (text: string | null) => void }) {
+  const [value, setValue] = useState(text);
+  const finished = useRef(false);
+  const finish = (t: string | null) => {
+    if (finished.current) return;
+    finished.current = true;
+    done(t);
+  };
+  return (
+    <input
+      className="word-edit"
+      value={value}
+      size={Math.max(2, value.length + 1)}
+      aria-label="Correct this word"
+      autoFocus
+      onFocus={(e) => e.currentTarget.select()}
+      onChange={(e) => setValue(e.target.value)}
+      onMouseDown={(e) => e.stopPropagation()}
+      onKeyDown={(e) => {
+        e.stopPropagation();
+        if (e.key === 'Enter') finish(value);
+        else if (e.key === 'Escape') finish(null);
+      }}
+      onBlur={() => finish(value)}
+    />
+  );
+}
 
 function PauseChip({ p }: { p: Pause }) {
   const keep = useStore((s) => s.settings.pauseKeep);
@@ -112,6 +164,8 @@ export function Transcript() {
   const skipClick = useRef(false);
   const inner = useRef<HTMLDivElement>(null);
   const [openSpeaker, setOpenSpeaker] = useState<string | null>(null);
+  /** The word being corrected (double-click), if any. */
+  const [editing, setEditing] = useState<string | null>(null);
 
   const display = useMemo(() => displayWords(recording.words, recording.segments), [recording.words, recording.segments]);
   const paras = currentParagraphs(recording);
@@ -325,12 +379,14 @@ export function Transcript() {
             onPick={onPick}
             open={openSpeaker === p.key}
             setOpen={(o) => setOpenSpeaker(o ? p.key : null)}
+            editing={editing}
+            setEditing={setEditing}
           />
         ))}
         {view === 'transcript' && <SelectionBar inner={inner} />}
         {view === 'transcript' && <p className="hint">
           Click a word to jump there. Drag across words, or <kbd>Shift</kbd>+click, to select a range. <kbd>Delete</kbd> cuts the selection,{' '}
-          <kbd>{combo('mod', 'Z')}</kbd> undoes. Click a speaker name to rename it, and a pause chip to shorten that pause. Press{' '}
+          <kbd>{combo('mod', 'Z')}</kbd> undoes. Double-click a word to correct it. Click a speaker name to rename it, and a pause chip to shorten that pause. Press{' '}
           <kbd>?</kbd> for help and all shortcuts.
         </p>}
       </div>
@@ -434,6 +490,8 @@ function Para({
   onPick,
   open,
   setOpen,
+  editing,
+  setEditing,
 }: {
   first: boolean;
   last: boolean;
@@ -445,6 +503,8 @@ function Para({
   onPick: (i: number, shift: boolean) => void;
   open: boolean;
   setOpen: (open: boolean) => void;
+  editing: string | null;
+  setEditing: (id: string | null) => void;
 }) {
   const out = sourceToOutput(recording.segments, para.start + 0.001);
   // a bar in the margin per part this paragraph holds words of (mockups/speech-parts-c-margin.html)
@@ -496,6 +556,8 @@ function Para({
                 color={marks.color.get(id)}
                 wave={marks.waveSel.has(id)}
                 onPick={onPick}
+                editing={editing === id}
+                onEdit={setEditing}
               />
               {after && <PauseChip p={after} />}
             </span>

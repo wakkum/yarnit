@@ -322,6 +322,17 @@ export const isFillerText = (text: string, fillers = FILLERS) =>
   fillers.includes(text.toLowerCase().replace(/[^a-z']/g, ''));
 
 /**
+ * Correct a misheard word: only its text changes (timing, speaker and cuts stay), and whether it is a
+ * filler follows the new text. Blank or unchanged text returns `words` itself.
+ */
+export function retypeWord(words: Word[], id: string, text: string): Word[] {
+  const clean = text.replace(/\s+/g, ' ').trim();
+  const w = words.find((x) => x.id === id);
+  if (!w || !clean || clean === w.text) return words;
+  return words.map((x) => (x.id === id ? { ...x, text: clean, isFiller: isFillerText(clean) } : x));
+}
+
+/**
  * A stretch of dead air in the edited audio: between two kept words that play back to back
  * (same segment, so nothing was cut there), or before the first / after the last kept word.
  */

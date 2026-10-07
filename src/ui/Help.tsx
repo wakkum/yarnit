@@ -29,6 +29,7 @@ const KEYS: [string, ReactNode][] = [
   ['Send words to the main timeline', <>Select them, then <b>Send to main</b> in the bar that appears</>],
   ['Highlight in a colour', <>Select words, then click a colour in the bar, or press <kbd>1</kbd> to <kbd>6</kbd>. <kbd>0</kbd> removes it</>],
   ['Rename a speaker', 'Click the speaker name next to a paragraph'],
+  ['Correct a misheard word', <>Double-click it, type the right word (or several, such as a full name) and press <kbd>Enter</kbd>. <kbd>Esc</kbd> cancels. The audio does not change. On the main timeline this corrects that clip only</>],
   ['Shorten one pause', 'Click its chip (for example 2.4 s) in the transcript'],
   ['Main timeline: select a clip', <>Click it to set its volume, fades and the pause before it. Drag a music or effect clip to move it, drag the small squares to set its fades. <kbd>Esc</kbd> deselects</>],
   ['Main timeline: cut a clip in two', <>Click the spot on the clip, then <b>Cut here</b>, or select the clip and press <kbd>C</kbd> to cut at the playhead. A voice clip is cut in the nearest pause between words</>],
@@ -59,6 +60,7 @@ const FAQ: [string, string][] = [
   ['How does the main timeline work?', 'It is where you combine recordings into the final version. Send to main copies a piece of a recording into it as a clip, so later edits to the recording do not change the clip (send it again if you want the new version). Every kind has its own lane. Interview and voice-over clips play one after another in running order: drag one past another (or use the arrows) to change the order, and drop it with space before it, or use Pause before, to add a gap. Music and sound effects start where you drag them and play under the voice, so they do not move when you cut speech before them. Click a clip to cut it in two at that spot, or to set its volume (for example 30% for a music bed) and a fade in and fade out. Dragged clips snap to the edges of the other clips, so a voice-over can follow an interview part with no gap. The main timeline has its own Undo.'],
   ['Can I switch between light and dark?', 'Yes, with Auto / Light / Dark at the top right. Auto follows your computer. Your choice is remembered in this browser.'],
   ['Can I see the tour again?', 'Yes: Take the tour again, under Getting started in this help. It shows each part of the app the next time it is on screen: the start screen, a transcribed recording, a music file and the main timeline.'],
+  ['Can I use audio from YouTube?', 'Yarnit cannot download from YouTube itself: browsers do not allow it. On your own computer, the free tool yt-dlp can save just the audio of a video you have the right to use: run  yt-dlp -x --audio-format mp3 "the video link"  in a terminal, then drop the MP3 onto Yarnit. YouTube\'s terms only allow downloading where YouTube offers it, so use your own videos or ones you have permission for.'],
   ['Which browser should I use?', 'Chrome or Edge. Other browsers may work but are untested.'],
 ];
 

@@ -136,6 +136,8 @@ select { background: var(--panel); border: 1px solid var(--line); border-radius:
 .para-label { display: flex; flex-direction: column; align-items: flex-start; font-weight: 600; font-size: 13px; padding-top: 4px; user-select: none; }
 .para-label .ts { color: var(--muted); font-weight: 400; font-size: 12px; }
 .para p { margin: 0; font-size: 17px; line-height: 1.75; max-width: 70ch; user-select: none; }
+/* correcting a misheard word in place */
+.word-edit { font: inherit; color: inherit; padding: 0 3px; margin: 0 -4px; border: 1px solid var(--accent); border-radius: 4px; background: var(--panel); outline: 2px solid color-mix(in srgb, var(--accent) 30%, transparent); }
 .w { border-radius: 3px; padding: 0 1px; cursor: pointer; }
 .w:hover { background: var(--bg); box-shadow: inset 0 0 0 1px var(--line); }
 .w.fill { font-style: italic; }

@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
+  retypeWord,
   deleteWords,
   displayWords,
   findPauses,
@@ -243,5 +244,23 @@ describe('output to source helpers', () => {
   it('list the source slices an output range plays', () => {
     expect(sourceSlices(segs, 3, 7)).toEqual([[23, 25], [0, 2]]);
     expect(sourceSlices(segs, 0, 10)).toEqual([[20, 25], [0, 5]]);
+  });
+});
+
+describe('retypeWord', () => {
+  const words = [
+    { id: 'a', text: 'Omer', start: 0, end: 0.4, trackId: 't' },
+    { id: 'b', text: 'um', start: 0.5, end: 0.7, trackId: 't', isFiller: true },
+  ];
+  it('changes only the text, and the filler flag with it', () => {
+    const next = retypeWord(words, 'a', '  Omar   Khalil ');
+    expect(next[0]).toEqual({ ...words[0], text: 'Omar Khalil', isFiller: false });
+    expect(next[1]).toBe(words[1]);
+    expect(retypeWord(words, 'b', 'on')[1].isFiller).toBe(false);
+  });
+  it('ignores blank, unchanged or unknown words', () => {
+    expect(retypeWord(words, 'a', '   ')).toBe(words);
+    expect(retypeWord(words, 'a', 'Omer')).toBe(words);
+    expect(retypeWord(words, 'zz', 'x')).toBe(words);
   });
 });

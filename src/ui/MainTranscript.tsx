@@ -10,7 +10,7 @@ import { useStore } from '../state/store';
 import { combo } from './keys';
 import { KIND_LABEL } from './kinds';
 import { KindIcon } from './Sidebar';
-import { RenameForm } from './Transcript';
+import { RenameForm, WordInput } from './Transcript';
 import { fmt, trackColor, useMixPlayhead } from './util';
 
 export function MainTranscript() {
@@ -107,7 +107,7 @@ export function MainTranscript() {
           />
         ))}
         <p className="hint">
-          Click a word to jump there. Drag across words, or <kbd>Shift</kbd>+click, to select; <kbd>Delete</kbd> cuts them from this clip only. ↑ ↓ change the
+          Click a word to jump there. Drag across words, or <kbd>Shift</kbd>+click, to select; <kbd>Delete</kbd> cuts them from this clip only; double-click a word to correct it. ↑ ↓ change the
           running order, ✕ removes a clip. {others > 0 && `Music and effects (${others}) are on the lanes above.`}
         </p>
       </div>
@@ -136,6 +136,8 @@ function ClipText({
 }) {
   const paras = useMemo(() => paragraphs(displayWords(c.words, c.segments)), [c.words, c.segments]);
   const on = useStore((s) => s.mainClip === c.id);
+  /** The word being corrected (double-click), if any. */
+  const [editing, setEditing] = useState<string | null>(null);
   const st = useStore.getState();
   const speakerName = (id?: string) => c.speakers.find((s) => s.id === id)?.name ?? 'Speaker';
   const speakerIndex = (id?: string) => Math.max(0, c.speakers.findIndex((s) => s.id === id));
@@ -184,10 +186,24 @@ function ClipText({
                   if (selected.has(d.word.id)) cls.push('sel', 'sel-first', 'sel-last');
                   if (current === d.word.id) cls.push('cur');
                 }
+                if (editing === d.word.id)
+                  return (
+                    <span key={d.word.id}>
+                      <WordInput
+                        text={d.word.text}
+                        done={(text) => {
+                          if (text != null) st.retypeMainWord(c.id, d.word.id, text);
+                          setEditing(null);
+                        }}
+                      />{' '}
+                    </span>
+                  );
                 return (
                   <span key={d.word.id}>
                     <span
                       className={cls.join(' ')}
+                      onDoubleClick={() => !d.deleted && setEditing(d.word.id)}
+                      title={d.deleted ? undefined : 'Double-click to correct this word (in this clip only)'}
                       onMouseDown={(e) => {
                         if (d.deleted || e.button !== 0) return;
                         e.preventDefault();

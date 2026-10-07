@@ -4,7 +4,7 @@
 import { MixPlayer } from '../audio/mix';
 import { Player } from '../audio/player';
 import { decodeFile, resampled } from '../audio/decode';
-import { displayWords } from '../engine/edl';
+import { displayWords, retypeWord } from '../engine/edl';
 import { passages, wordColors } from '../engine/highlights';
 import {
   addClips,
@@ -60,6 +60,8 @@ export type MainSlice = {
   /** One undoable, saved change; `before` is the state to undo to (for drags that previewed). */
   commitMain: (main: MainTimeline, before?: MainTimeline) => void;
   updateClip: (id: string, patch: Partial<MainClip>) => void;
+  /** Correct a misheard word in one clip (undoable); its recording keeps the old text. */
+  retypeMainWord: (clipId: string, wordId: string, text: string) => void;
   /** Rename a speaker in a clip and in every other clip from its recording (undoable). */
   renameMainSpeaker: (clipId: string, speakerId: string, name: string) => void;
   moveClip: (id: string, dir: -1 | 1) => void;
@@ -241,6 +243,13 @@ export function createMainSlice(set: (p: Partial<State>) => void, get: () => Sta
 
     updateClip(id, patch) {
       get().commitMain(updateClip(mainOf(get()), id, patch));
+    },
+
+    retypeMainWord(clipId, wordId, text) {
+      const main = mainOf(get());
+      const c = main.clips.find((x) => x.id === clipId);
+      const words = c && retypeWord(c.words, wordId, text);
+      if (c && words !== c.words) get().commitMain(updateClip(main, clipId, { words }));
     },
 
     renameMainSpeaker(clipId, speakerId, name) {

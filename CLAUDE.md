@@ -16,7 +16,7 @@ Local, in-browser, Descript-style audio editor. **Read ARCHITECTURE.md first**: 
 
 - `src/engine/` is pure TypeScript: no DOM, no Web Audio, no React. Every function there gets a Vitest test. Audio-dependent behaviour is injected (for example the `Snap` callback in `deleteWords`).
 - Annotations (highlights, future markers) are **source-time spans**, not word fields, so they map straight onto segments and cover every track.
-- Audio edits change **only** `project.segments`. Word text and timing are immutable after transcription; `speakerId` is the one field that may change (speaker labels). Every undoable change goes through `commit()` in the store.
+- Audio edits change **only** `project.segments`. Word timing is immutable after transcription. Two word fields may change: `speakerId` (speaker labels) and `text` (the user correcting a misheard word, `retypeWord`; never changes timing or the audio). Every undoable change goes through `commit()` in the store.
 - Heavy audio (`AudioBuffer`s, the 16 kHz copy, the `Player`) lives in `media` in `src/state/store.ts`, never in Zustand state.
 - Long-running work goes in a Web Worker (`src/workers/`). Transfer buffers instead of copying where possible.
 - Player and export must stay identical: same `FADE_SECONDS`, same equal-power curve (`render.ts` / `player.ts`).
