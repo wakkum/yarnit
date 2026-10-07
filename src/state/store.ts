@@ -359,6 +359,7 @@ export const useStore = create<State>((set, get) => ({
     if (!items.length) return;
     if (!get().project) await createProject(set, get, baseName(items[0].file.name));
     const added: string[] = [];
+    const speech: string[] = [];
     for (const [i, { file, kind }] of items.entries()) {
       set({ notice: `Adding ${file.name}${items.length > 1 ? ` (${i + 1} of ${items.length})` : ''}` });
       try {
@@ -386,20 +387,25 @@ export const useStore = create<State>((set, get) => ({
         const project = get().project!;
         persistProject(set, { ...project, recordingIds: [...project.recordingIds, recording.id] });
         set({ recordings: [...get().recordings, summarizeRecording(saved)] });
-        if (isSpeech(kind)) enqueue(recording.id);
+        if (isSpeech(kind)) speech.push(recording.id);
         added.push(recording.id);
+        // the first one is opened next: hand it the decoded audio so a long file is not decoded twice
+        if (added.length === 1) handoff = { trackId, buffer };
       } catch (err) {
         const blocked = (err as Error).name === 'QuotaExceededError' || /storage|quota|IndexedDB/i.test(String(err));
         set({
           notice: blocked
             ? `Could not add ${file.name}: this browser is not letting Yarnit save (private window or full disk).`
-            : `Could not add ${file.name}: ${(err as Error).message}`,
+            : `Could not add ${file.name}: ${readError(err)}`,
         });
       }
     }
     if (!added.length) return;
     library.requestPersistence();
     await get().openRecording(added[0]);
+    handoff = null;
+    // queued only now, so the open one is transcribed from the audio already in memory instead of a third decode
+    speech.forEach(enqueueOpen);
     set({ notice: added.length > 1 ? `Added ${added.length} recordings` : '' });
   },
 
@@ -470,28 +476,36 @@ export const useStore = create<State>((set, get) => ({
       if (!saved) throw new Error('it was saved by a newer version of Yarnit, or is damaged');
       let { recording } = saved;
       const track = recording.tracks[0];
-      const file = await library.loadAudio(track.id);
-      if (!file) throw new Error('its audio is missing from browser storage');
-      const audio = await prepareAudio(await decodeFile(player.ctx, file));
+      let decoded = handoff?.trackId === track.id ? handoff.buffer : null;
+      handoff = null;
+      if (!decoded) {
+        const file = await library.loadAudio(track.id);
+        if (!file) throw new Error('its audio is missing from browser storage');
+        decoded = await decodeFile(player.ctx, file);
+      }
+      const audio = await prepareAudio(decoded);
       if (opening !== id || get().mainOpen) return; // another recording, or the main timeline, was clicked meanwhile
       attachAudio(audio, track.id, set);
       player.setSegments(recording.segments);
+      let restart = false;
       if (running?.id === id) recording = { ...recording, words: running.words };
       else if (!saved.transcribed && isSpeech(recording.kind)) {
         // unfinished transcript: it starts over (edits made meanwhile only touched segments, which stay)
         recording = { ...recording, words: [] };
-        enqueue(id);
+        restart = true;
       }
       const t = get().transcribing;
       const phase = t?.id === id ? (t.stage === 'download' ? 'downloading' : 'transcribing') : 'ready';
       set({ recording, transcribed: saved.transcribed, saveStatus: 'saving', phase, message: phase === 'ready' ? '' : 'Transcribing' });
+      // only once it is the open recording, so the queue uses the audio in memory instead of decoding it again
+      if (restart) enqueueOpen(id);
       const project = get().project;
       if (project && (project.lastRecordingId !== id || project.mainOpen)) {
         const { mainOpen: _wasMain, ...rest } = project;
         persistProject(set, { ...rest, lastRecordingId: id });
       }
     } catch (err) {
-      set({ phase: 'error', message: `Could not open ${name}: ${(err as Error).message}` });
+      set({ phase: 'error', message: `Could not open ${name}: ${readError(err)}` });
     }
   },
 
@@ -936,6 +950,16 @@ function viewLength(s: State) {
 let resumed = false;
 /** The recording an openRecording call is decoding, so a slower earlier call can't win. */
 let opening: string | null = null;
+/** Audio just decoded by confirmAdd for the recording it opens next. */
+let handoff: { trackId: string; buffer: AudioBuffer } | null = null;
+
+/** The browser says "Unable to decode audio data" both for formats it can't read and when it runs out of memory. */
+function readError(err: unknown): string {
+  const e = err as Error;
+  if (e?.name === 'EncodingError' || /decode audio data/i.test(e?.message ?? ''))
+    return 'the browser could not read the audio. Very long files (over an hour or so) can need more memory than the browser allows: close other tabs and try again, or split the file. Otherwise the format may not be supported: MP3, WAV and M4A (AAC) work.';
+  return e?.message ?? String(err);
+}
 
 async function decodeBlob(blob: Blob) {
   media.player ??= new Player();
@@ -993,6 +1017,14 @@ function enqueue(id: string) {
   queue.push(id);
   useStore.setState({ queued: [...queue] });
   void pump();
+}
+
+/** Queue a recording, and if it is the open one and starts right away, show that in its status line. */
+function enqueueOpen(id: string) {
+  enqueue(id);
+  const { recording, transcribing } = useStore.getState();
+  if (recording?.id === id && transcribing?.id === id)
+    useStore.setState({ phase: transcribing.stage === 'download' ? 'downloading' : 'transcribing', message: 'Transcribing' });
 }
 
 function dequeue(id: string) {
