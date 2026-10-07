@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { addPart, labelRows, wordParts, wordsInOutput, MIN_PART, nextPartName, removePart, renamePart, setPartEdge } from './parts';
-import type { DisplayWord } from './edl';
+import { addPart, labelRows, spanFromSlices, wordParts, wordsInOutput, MIN_PART, nextPartName, removePart, renamePart, setPartEdge } from './parts';
+import { wordOutputTimes, type DisplayWord } from './edl';
 import type { Part, Word } from './types';
 
 const word = (id: string, start: number, end: number): Word => ({ id, text: id, start, end, trackId: 't' });
@@ -38,7 +38,14 @@ describe('parts', () => {
     const parts = [p('a', 0, 1)];
     expect(renamePart(parts, 'a', '  Sting ')[0].name).toBe('Sting');
     expect(renamePart(parts, 'a', '  ')).toBe(parts);
+    expect(renamePart(parts, 'a', ' a ')).toBe(parts);
     expect(removePart(parts, 'a')).toEqual([]);
+  });
+
+  it('make one span from a selection, across cuts but not across a move', () => {
+    expect(spanFromSlices([])).toBeNull();
+    expect(spanFromSlices([[0, 2], [5, 8]])).toEqual({ start: 0, end: 8, whole: true });
+    expect(spanFromSlices([[20, 21], [0, 4]])).toEqual({ start: 0, end: 4, whole: false });
   });
 
   it('stack labels that would collide', () => {
@@ -55,8 +62,19 @@ describe('parts in a transcript', () => {
     // b cut: output 0..1.5 is source 0..1.5, then source 3.5..8 follows
     const segments = [{ id: 's1', start: 0, end: 1.5 }, { id: 's2', start: 3.5, end: 8 }];
     const display = [dw(words[0]), dw(words[1], true), dw(words[2]), dw(words[3])];
-    expect(wordsInOutput(display, segments, 0, 3)).toEqual(['a', 'c']);
-    expect(wordsInOutput(display, segments, 3, 10)).toEqual(['d']);
+    const times = wordOutputTimes(display, segments);
+    expect(times.get('b')).toBeUndefined();
+    expect(times.get('c')).toBeCloseTo(1.5 + 4.5 - 3.5);
+    expect(wordsInOutput(times, 0, 3)).toEqual(['a', 'c']);
+    expect(wordsInOutput(times, 3, 10)).toEqual(['d']);
+  });
+
+  it('time words through moved segments in playback order', () => {
+    // plays source 4..8 first, then 0..4
+    const segments = [{ id: 's1', start: 4, end: 8 }, { id: 's2', start: 0, end: 4 }];
+    const display = [dw(words[2]), dw(words[3]), dw(words[0]), dw(words[1])];
+    const times = wordOutputTimes(display, segments);
+    expect([...times].map(([id, t]) => `${id}@${t}`)).toEqual(['c@0.5', 'd@2.5', 'a@4.5', 'b@6.5']);
   });
 
   it('map words to parts and mark where each part starts', () => {

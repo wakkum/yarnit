@@ -1,7 +1,8 @@
 // Autosave format. A project and each of its recordings are saved as separate records, so editing
 // one recording never rewrites the others. Audio files are stored apart (src/state/library.ts),
 // keyed by track id. Version 1 (before 6 Oct 2026) saved one recording per "project".
-import { HIGHLIGHT_COLORS, RECORDING_KINDS, type Project, type Recording, type RecordingKind } from './types';
+import { MAX_GAIN } from './main';
+import { HIGHLIGHT_COLORS, RECORDING_KINDS, type MainClip, type MainTimeline, type Project, type Recording, type RecordingKind } from './types';
 
 export const SAVE_VERSION = 2;
 
@@ -105,7 +106,36 @@ export function fromSavedProject(data: unknown): SavedProject | null {
       name: p.name || 'Untitled project',
       recordingIds: Array.isArray(p.recordingIds) ? p.recordingIds.filter((x) => typeof x === 'string') : [],
       ...(p.lastRecordingId ? { lastRecordingId: p.lastRecordingId } : {}),
+      ...(p.mainOpen ? { mainOpen: true } : {}),
+      ...(p.main ? { main: readMain(p.main) } : {}),
     },
+  };
+}
+
+const num = (x: unknown, fallback: number) => (typeof x === 'number' && Number.isFinite(x) ? x : fallback);
+
+/** The main timeline, dropping clips that can't play (no audio key, unknown kind, no spans). */
+function readMain(data: unknown): MainTimeline {
+  const clips = (data as Partial<MainTimeline>)?.clips;
+  if (!Array.isArray(clips)) return { clips: [] };
+  const kinds = new Set<string>(RECORDING_KINDS);
+  return {
+    clips: clips
+      .filter(
+        (c): c is MainClip =>
+          !!c && typeof c.id === 'string' && typeof c.trackId === 'string' && kinds.has(c.kind) && Array.isArray(c.segments) && c.segments.length > 0,
+      )
+      .map((c) => ({
+        ...c,
+        name: c.name || 'Clip',
+        words: Array.isArray(c.words) ? c.words : [],
+        speakers: Array.isArray(c.speakers) ? c.speakers : [],
+        gain: Math.min(MAX_GAIN, Math.max(0, num(c.gain, 1))),
+        fadeIn: Math.max(0, num(c.fadeIn, 0)),
+        fadeOut: Math.max(0, num(c.fadeOut, 0)),
+        gap: Math.max(0, num(c.gap, 0)),
+        at: Math.max(0, num(c.at, 0)),
+      })),
   };
 }
 

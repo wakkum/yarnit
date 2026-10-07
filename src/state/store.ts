@@ -12,8 +12,8 @@ import {
   moveWords as moveInEdit,
   newId,
   outputDuration,
-  outputToSource,
   removeOutputRange,
+  sourceSlices,
   PARAGRAPH_PAD,
   shortenPauses as shortenInEdit,
   sourceToOutput,
@@ -21,7 +21,7 @@ import {
 } from '../engine/edl';
 import { renderEdit, silenceThreshold, snapToQuiet, speechEnd } from '../engine/render';
 import { highlightWords } from '../engine/highlights';
-import { addPart, removePart, renamePart } from '../engine/parts';
+import { addPart, removePart, renamePart, spanFromSlices } from '../engine/parts';
 import {
   baseName,
   guessKind,
@@ -38,6 +38,8 @@ import type { ExportMessage, ExportRequest } from '../workers/export.worker';
 import type { TranscribeMessage, TranscribeRequest } from '../workers/transcribe.worker';
 import { ago } from '../ui/time';
 import * as library from './library';
+import { media } from './media';
+import { createMainSlice, mainLength, type MainSlice } from './mainSlice';
 
 /** 'off': this recording is not being saved (storage blocked or full); see `message`. */
 export type SaveStatus = 'off' | 'saving' | 'saved' | 'error';
@@ -101,16 +103,9 @@ const HISTORY_LIMIT = 200;
 /** Waveform resolution per track (the timeline shows the whole recording). */
 const PEAK_BUCKETS = 3000;
 
-/** Non-reactive media: decoded audio, the Whisper copy, the player. */
-export const media = {
-  buffers: new Map<string, AudioBuffer>(),
-  mono16k: null as Float32Array | null,
-  /** Level below which the 16 kHz copy counts as silence (estimated per file). */
-  silence: 0.002,
-  player: null as Player | null,
-};
+export { media };
 
-type State = {
+export type State = MainSlice & {
   /** The open project (null on the start screen). */
   project: Project | null;
   /** Its recordings, in sidebar order. */
@@ -254,25 +249,34 @@ export function currentParagraphs(recording: Recording): Paragraph[] {
   return parasCache.paras;
 }
 
-/** Decode-side setup shared by a new file and a reopened recording. */
-async function attachAudio(buffer: AudioBuffer, trackId: string, set: (p: Partial<State>) => void) {
-  media.buffers = new Map([[trackId, buffer]]);
-  media.mono16k = await toWhisperMono(buffer);
-  media.silence = silenceThreshold(media.mono16k, WHISPER_SAMPLE_RATE);
-  set({ peaks: { [trackId]: computePeaks(media.mono16k, PEAK_BUCKETS) } });
-  media.player!.setTracks([{ buffer, offset: 0 }]);
+/** The slow, side-effect-free part of opening audio: the 16 kHz copy and what is derived from it. */
+async function prepareAudio(buffer: AudioBuffer) {
+  const mono16k = await toWhisperMono(buffer);
+  return { buffer, mono16k, silence: silenceThreshold(mono16k, WHISPER_SAMPLE_RATE), peaks: computePeaks(mono16k, PEAK_BUCKETS) };
+}
+
+/** Make prepared audio the open recording's. Synchronous, so it runs only after the last stale-check. */
+function attachAudio(audio: Awaited<ReturnType<typeof prepareAudio>>, trackId: string, set: (p: Partial<State>) => void) {
+  media.buffers = new Map([[trackId, audio.buffer]]);
+  media.mono16k = audio.mono16k;
+  media.silence = audio.silence;
+  set({ peaks: { [trackId]: audio.peaks } });
+  media.player!.setTracks([{ buffer: audio.buffer, offset: 0 }]);
 }
 
 /** Stop the previous recording's playback. (Transcription carries on in the background.) */
-function resetSession(set: (p: Partial<State>) => void) {
+export function resetSession(set: (p: Partial<State>) => void) {
   media.player?.pause();
+  // leaving the main timeline: remember where it was, so sent music lands there
+  if (media.mix && useStore.getState().mainOpen) set({ mainPlayhead: media.mix.currentTime });
+  media.mix?.pause();
   media.player ??= new Player();
   media.player.onEnded = () => set({ playing: false, playingPart: null });
   return media.player;
 }
 
 /** Everything that belongs to one open recording, cleared when another opens. */
-const FRESH = {
+export const FRESH = {
   selection: [],
   moved: null,
   zoom: null,
@@ -395,6 +399,7 @@ export const useStore = create<State>((set, get) => ({
     await flushSave();
     resetSession(set);
     for (const id of [...get().queued]) dequeue(id);
+    leaveMain(set);
     set({ ...FRESH, recording: null, saveStatus: 'off', phase: 'empty', progress: 0, message: '' });
     await createProject(set, get, 'Untitled project');
     await get().refreshLibrary();
@@ -403,6 +408,7 @@ export const useStore = create<State>((set, get) => ({
   async openProject(id) {
     await flushSave();
     resetSession(set);
+    leaveMain(set);
     set({ ...FRESH, recording: null, saveStatus: 'off', phase: 'decoding', progress: 0, message: 'Opening project' });
     try {
       const saved = await library.loadProject(id);
@@ -415,7 +421,8 @@ export const useStore = create<State>((set, get) => ({
       set({ project, recordings });
       for (const r of recordings) if (isSpeech(r.kind) && !r.transcribed) enqueue(r.id);
       const target = recordings.find((r) => r.id === project.lastRecordingId) ?? recordings[0];
-      if (target) await get().openRecording(target.id);
+      if (project.mainOpen && project.main?.clips.length) await get().openMain();
+      else if (target) await get().openRecording(target.id);
       else set({ phase: 'empty', message: '' });
     } catch (err) {
       set({ phase: 'error', message: `Could not open the project: ${(err as Error).message}` });
@@ -434,6 +441,7 @@ export const useStore = create<State>((set, get) => ({
         await flushSave();
         resetSession(set);
         for (const r of get().recordings) dequeue(r.id);
+        leaveMain(set);
         set({ ...FRESH, project: null, recordings: [], recording: null, saveStatus: 'off', phase: 'empty', progress: 0, message: '' });
       }
       await library.deleteProject(id);
@@ -448,7 +456,7 @@ export const useStore = create<State>((set, get) => ({
     const player = resetSession(set);
     opening = id;
     const name = get().recordings.find((r) => r.id === id)?.name ?? 'recording';
-    set({ ...FRESH, recording: null, saveStatus: 'off', phase: 'decoding', progress: 0, message: `Opening ${name}` });
+    set({ ...FRESH, recording: null, mainOpen: false, saveStatus: 'off', phase: 'decoding', progress: 0, message: `Opening ${name}` });
     try {
       const saved = await library.loadRecording(id);
       if (!saved) throw new Error('it was saved by a newer version of Yarnit, or is damaged');
@@ -456,9 +464,9 @@ export const useStore = create<State>((set, get) => ({
       const track = recording.tracks[0];
       const file = await library.loadAudio(track.id);
       if (!file) throw new Error('its audio is missing from browser storage');
-      const buffer = await decodeFile(player.ctx, file);
-      if (opening !== id) return; // another recording was clicked meanwhile
-      await attachAudio(buffer, track.id, set);
+      const audio = await prepareAudio(await decodeFile(player.ctx, file));
+      if (opening !== id || get().mainOpen) return; // another recording, or the main timeline, was clicked meanwhile
+      attachAudio(audio, track.id, set);
       player.setSegments(recording.segments);
       if (running?.id === id) recording = { ...recording, words: running.words };
       else if (!saved.transcribed && isSpeech(recording.kind)) {
@@ -470,7 +478,10 @@ export const useStore = create<State>((set, get) => ({
       const phase = t?.id === id ? (t.stage === 'download' ? 'downloading' : 'transcribing') : 'ready';
       set({ recording, transcribed: saved.transcribed, saveStatus: 'saving', phase, message: phase === 'ready' ? '' : 'Transcribing' });
       const project = get().project;
-      if (project && project.lastRecordingId !== id) persistProject(set, { ...project, lastRecordingId: id });
+      if (project && (project.lastRecordingId !== id || project.mainOpen)) {
+        const { mainOpen: _wasMain, ...rest } = project;
+        persistProject(set, { ...rest, lastRecordingId: id });
+      }
     } catch (err) {
       set({ phase: 'error', message: `Could not open ${name}: ${(err as Error).message}` });
     }
@@ -512,10 +523,27 @@ export const useStore = create<State>((set, get) => ({
       // still drop it from the project below
     }
     const { lastRecordingId, ...kept } = project;
-    persistProject(set, { ...kept, recordingIds: project.recordingIds.filter((r) => r !== id), ...(lastRecordingId !== id ? { lastRecordingId } : {}) });
+    // its clips on the main timeline lose their audio, so they go too (and the main undo history, which may hold them)
+    const main = project.main && { clips: project.main.clips.filter((c) => c.recordingId !== id) };
+    const dropped = !!main && main.clips.length !== project.main!.clips.length;
+    for (const t of summary.trackIds) {
+      media.mainBuffers.delete(t);
+      media.mainPeaks.delete(t);
+    }
+    persistProject(set, {
+      ...kept,
+      recordingIds: project.recordingIds.filter((r) => r !== id),
+      ...(lastRecordingId !== id ? { lastRecordingId } : {}),
+      ...(main ? { main } : {}),
+    });
+    if (dropped) {
+      set({ mainPast: [], mainFuture: [] });
+      if (get().mainOpen) get().previewMain(main!);
+    }
     set({ recordings: rest });
     const next = rest[Math.min(index, rest.length - 1)];
     if (recording?.id === id && next) await get().openRecording(next.id);
+    else if (recording?.id === id && get().project?.main?.clips.length) await get().openMain();
   },
 
   setSettings(s) {
@@ -559,6 +587,7 @@ export const useStore = create<State>((set, get) => ({
   },
 
   undo() {
+    if (get().mainOpen) return get().mainUndo();
     const { recording, past, future } = get();
     const prev = past.at(-1);
     if (!recording || !prev) return;
@@ -567,6 +596,7 @@ export const useStore = create<State>((set, get) => ({
   },
 
   redo() {
+    if (get().mainOpen) return get().mainRedo();
     const { recording, past, future } = get();
     const next = future[0];
     if (!recording || !next) return;
@@ -575,6 +605,18 @@ export const useStore = create<State>((set, get) => ({
   },
 
   togglePlay() {
+    if (get().mainOpen) {
+      const mix = media.mix;
+      if (!mix) return;
+      if (mix.playing) {
+        mix.pause();
+        set({ playing: false, mainPlayhead: mix.currentTime });
+      } else {
+        void mix.play();
+        set({ playing: true });
+      }
+      return;
+    }
     const p = media.player;
     if (!p) return;
     if (p.playing) p.pause();
@@ -631,12 +673,15 @@ export const useStore = create<State>((set, get) => ({
   addPartFromSelection() {
     const { recording, waveSel } = get();
     if (!recording || !waveSel) return;
-    const a = outputToSource(recording.segments, waveSel.start)?.source ?? waveSel.start;
-    const b = outputToSource(recording.segments, waveSel.end)?.source ?? waveSel.end;
-    const added = addPart(recording.parts, a, b, recording.duration);
+    const span = spanFromSlices(sourceSlices(recording.segments, waveSel.start, waveSel.end));
+    const added = span && addPart(recording.parts, span.start, span.end, recording.duration);
     if (!added) return;
     commit(set, get, { parts: added.parts });
-    set({ waveSel: null, freshPart: added.part.id });
+    set({
+      waveSel: null,
+      freshPart: added.part.id,
+      ...(span.whole ? {} : { notice: 'A part can not cross a moved passage, so it holds the longest piece of the selection.' }),
+    });
   },
 
   deleteWaveSel() {
@@ -760,15 +805,15 @@ export const useStore = create<State>((set, get) => ({
   setNotice: (notice) => set({ notice }),
   setView: (view) => set({ view }),
   setZoom(zoom) {
-    const { recording } = get();
-    set({ zoom: recording ? clampView(zoom, outputDuration(recording.segments)) : null });
+    const total = viewLength(get());
+    set({ zoom: total ? clampView(zoom, total) : null });
   },
   zoomBy(factor, anchor) {
-    const { recording, zoom } = get();
-    if (!recording) return;
-    const total = outputDuration(recording.segments);
+    const { zoom } = get();
+    const total = viewLength(get());
+    if (!total) return;
     const v = zoom ?? { start: 0, span: total };
-    const head = media.player?.currentTime ?? 0;
+    const head = (get().mainOpen ? media.mix?.currentTime : media.player?.currentTime) ?? 0;
     const at = anchor ?? (head >= v.start && head <= v.start + v.span ? head : v.start + v.span / 2);
     set({ zoom: zoomAround(zoom, total, factor, at) });
   },
@@ -818,33 +863,41 @@ export const useStore = create<State>((set, get) => ({
     if (!recording) return;
     set({ phase: 'exporting', progress: 0, message: `Exporting ${format.toUpperCase()}` });
     const tracks = recording.tracks.map((t) => ({ channels: channelsOf(media.buffers.get(t.id)!), offset: t.offset }));
-    const channels = renderEdit(tracks, recording.segments, recording.sampleRate);
-    const worker = new Worker(new URL('../workers/export.worker.ts', import.meta.url), { type: 'module' });
-    const req: ExportRequest = { channels, sampleRate: recording.sampleRate, format };
-    worker.postMessage(req, channels.map((c) => c.buffer as ArrayBuffer));
-    await new Promise<void>((resolve) => {
-      worker.onerror = () => {
-        set({ phase: 'ready', message: 'Export failed: the export worker could not load. Reload the page and try again.' });
-        resolve();
-      };
-      worker.onmessage = (e: MessageEvent<ExportMessage>) => {
-        const m = e.data;
-        if (m.type === 'progress') set({ progress: m.progress });
-        if (m.type === 'error') {
-          set({ phase: 'ready', message: `Export failed: ${m.message}` });
-          resolve();
-        }
-        if (m.type === 'done') {
-          const base = recording.name.replace(/\.[^.]+$/, '');
-          download(new Blob([m.data], { type: m.mimeType }), `${base}-edited${m.extension}`);
-          set({ phase: 'ready', message: 'Export finished' });
-          resolve();
-        }
-      };
-    });
-    worker.terminate();
+    // names have no extension since 6 Oct, so a dot in one ("Ep. 3") is part of the name
+    await runExport(renderEdit(tracks, recording.segments, recording.sampleRate), recording.sampleRate, format, `${recording.name}-edited`);
   },
+
+  ...createMainSlice(set, get, { persistProject, flushSave, resetSession, fresh: FRESH, runExport }),
 }));
+
+/** Encode rendered audio in the export worker and download it as `name` plus the format's extension. */
+async function runExport(channels: Float32Array[], sampleRate: number, format: 'wav' | 'mp3', name: string) {
+  const set = useStore.setState;
+  set({ phase: 'exporting', progress: 0, message: `Exporting ${format.toUpperCase()}` });
+  const worker = new Worker(new URL('../workers/export.worker.ts', import.meta.url), { type: 'module' });
+  const req: ExportRequest = { channels, sampleRate, format };
+  worker.postMessage(req, channels.map((c) => c.buffer as ArrayBuffer));
+  await new Promise<void>((resolve) => {
+    worker.onerror = () => {
+      set({ phase: 'ready', message: 'Export failed: the export worker could not load. Reload the page and try again.' });
+      resolve();
+    };
+    worker.onmessage = (e: MessageEvent<ExportMessage>) => {
+      const m = e.data;
+      if (m.type === 'progress') set({ progress: m.progress });
+      if (m.type === 'error') {
+        set({ phase: 'ready', message: `Export failed: ${m.message}` });
+        resolve();
+      }
+      if (m.type === 'done') {
+        download(new Blob([m.data], { type: m.mimeType }), `${name}${m.extension}`);
+        set({ phase: 'ready', message: 'Export finished' });
+        resolve();
+      }
+    };
+  });
+  worker.terminate();
+}
 
 function download(blob: Blob, name: string) {
   const a = document.createElement('a');
@@ -852,6 +905,20 @@ function download(blob: Blob, name: string) {
   a.download = name;
   a.click();
   setTimeout(() => URL.revokeObjectURL(a.href), 10_000);
+}
+
+/** Close the main timeline (another project opens or none): stop it and drop its audio and history. */
+function leaveMain(set: (p: Partial<State>) => void) {
+  media.mix?.pause();
+  media.mainBuffers.clear();
+  media.mainPeaks.clear();
+  set({ mainOpen: false, mainPast: [], mainFuture: [], mainClip: null, mainPlayhead: 0 });
+}
+
+/** Length of what the timeline shows: the open recording's edit, or the main timeline. */
+function viewLength(s: State) {
+  if (s.mainOpen) return mainLength(s);
+  return s.recording ? outputDuration(s.recording.segments) : 0;
 }
 
 let resumed = false;
@@ -863,7 +930,7 @@ async function decodeBlob(blob: Blob) {
   return decodeFile(media.player.ctx, blob);
 }
 
-function persistProject(set: (p: Partial<State>) => void, project: Project) {
+export function persistProject(set: (p: Partial<State>) => void, project: Project) {
   set({ project });
   library.saveProject(toSavedProject(project, Date.now())).catch(() => set({ saveStatus: 'error' }));
 }
@@ -1041,7 +1108,7 @@ useStore.subscribe((s, prev) => {
   pendingSave = setTimeout(() => void flushSave(), SAVE_DELAY_MS);
 });
 
-async function flushSave() {
+export async function flushSave() {
   if (pendingSave === undefined) return;
   clearTimeout(pendingSave);
   pendingSave = undefined;

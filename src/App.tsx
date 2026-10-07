@@ -12,9 +12,12 @@ import { ProjectsPanel } from './ui/ProjectsPanel';
 import { Timeline } from './ui/Timeline';
 import { TopBar } from './ui/TopBar';
 import { Transcript } from './ui/Transcript';
+import { MainTimeline } from './ui/MainTimeline';
+import { MainTranscript } from './ui/MainTranscript';
 
 export default function App() {
   const hasRecording = useStore((s) => s.recording != null);
+  const mainOpen = useStore((s) => s.mainOpen);
   const panel = useStore((s) => s.panel);
   // a new batch of files gets a fresh dialog (its own kind guesses)
   const pendingKey = useStore((s) => s.pendingFiles?.map((p) => p.file.name).join('|') ?? '');
@@ -44,7 +47,7 @@ export default function App() {
         st.setPanel(st.panel === 'help' ? null : 'help');
       } else if (e.key === 'Escape' && st.panel && !st.selection.length && !st.clipboard.length && !st.waveSel) {
         st.setPanel(null);
-      } else if (!mod && !e.altKey && /^[0-6]$/.test(e.key) && st.selection.length) {
+      } else if (!mod && !e.altKey && /^[0-6]$/.test(e.key) && st.selection.length && !st.mainOpen) {
         // 1 to 6 colour the selection, 0 clears its highlight
         e.preventDefault();
         st.highlightSelection(e.key === '0' ? null : HIGHLIGHT_COLORS[+e.key - 1]);
@@ -74,7 +77,8 @@ export default function App() {
       } else if (e.key === 'Backspace' || e.key === 'Delete') {
         e.preventDefault();
         // music and sound effects are never cut, only marked
-        if (st.waveSel && st.recording && isSpeech(st.recording.kind)) st.deleteWaveSel();
+        if (st.mainOpen) st.deleteMainSelection();
+        else if (st.waveSel && st.recording && isSpeech(st.recording.kind)) st.deleteWaveSel();
         else st.deleteSelection();
       } else if (mod && e.key.toLowerCase() === 'z') {
         e.preventDefault();
@@ -84,7 +88,7 @@ export default function App() {
         // Windows convention for redo
         e.preventDefault();
         st.redo();
-      } else if (mod && e.key === 'x' && st.selection.length) {
+      } else if (mod && e.key === 'x' && st.selection.length && !st.mainOpen) {
         e.preventDefault();
         st.cut();
       } else if (mod && e.key.toLowerCase() === 'v' && st.selection.length === 1 && st.clipboard.length) {
@@ -98,6 +102,7 @@ export default function App() {
         st.select([]);
         st.clearClipboard();
         st.setWaveSel(null);
+        st.selectClip(null);
       }
     };
     window.addEventListener('keydown', onKey);
@@ -117,7 +122,12 @@ export default function App() {
       }}
     >
       <TopBar />
-      {hasRecording ? (
+      {mainOpen ? (
+        <>
+          <MainTimeline />
+          <MainTranscript />
+        </>
+      ) : hasRecording ? (
         <>
           <Timeline />
           <Transcript />

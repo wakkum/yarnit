@@ -1,16 +1,14 @@
 // Parts of a recording. Music and sound effects show them as pads in place of a transcript
 // (mockups/parts-c-pads.html, picked 6 Oct 2026 with the regions of parts-a-list.html); speech shows a
 // strip of small pads under the timeline and marks parts in the transcript (speech-parts-c-margin.html).
-// "Send to main" waits for the main timeline.
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { editedPieces, toOutputSpans } from '../engine/view';
-import type { Part, Recording } from '../engine/types';
+import { isSpeech, type Part, type Recording } from '../engine/types';
 import { media, useStore } from '../state/store';
 import { combo } from './keys';
-import { rangeLabel } from './util';
+import { seconds, rangeLabel } from './util';
 import { Waveform } from './Waveform';
 
-const seconds = (t: number) => (t < 60 ? `${t.toFixed(1)} s` : `${Math.floor(t / 60)}:${String(Math.floor(t % 60)).padStart(2, '0')}`);
 
 export function Parts({ recording }: { recording: Recording }) {
   const peaks = useStore((s) => s.peaks[recording.tracks[0].id]);
@@ -20,6 +18,7 @@ export function Parts({ recording }: { recording: Recording }) {
       <div className="doc-inner parts">
         <h3>
           Parts of {recording.name} <span className="muted">{recording.parts.length ? `(${recording.parts.length})` : ''}</span>
+          {recording.parts.length > 1 && <SendAll />}
         </h3>
         <p className="muted">
           Drag across the waveform to select a piece of this {what}, then click <b>Add as part</b>. Each part can go to the main timeline on its own,
@@ -64,7 +63,23 @@ export function PartsStrip({ parts }: { parts: Part[] }) {
           <PartMenu part={p} />
         </div>
       ))}
+      {parts.length > 1 && <SendAll />}
     </div>
+  );
+}
+
+/** Sends every part of the open recording, each as its own clip. */
+function SendAll() {
+  const waiting = useStore((s) => !!s.recording && isSpeech(s.recording.kind) && !s.transcribed);
+  return (
+    <button
+      className="send-all"
+      disabled={waiting}
+      onClick={() => useStore.getState().sendToMain({ type: 'parts' })}
+      title={waiting ? 'Wait for the transcript to finish' : 'Send every part to the main timeline, each as its own clip'}
+    >
+      Send all to main
+    </button>
   );
 }
 
@@ -88,7 +103,7 @@ function Pad({ part, peaks, duration }: { part: Part; peaks: Float32Array | unde
       <div className="pad-row">
         <PlayButton part={part} />
         <span className="muted">{playing ? 'playing' : ''}</span>
-        <button className="send" disabled title="Comes with the main timeline, the next step">
+        <button className="send" onClick={() => useStore.getState().sendToMain({ type: 'part', id: part.id })} title="Copy this part to the main timeline">
           Send to main
         </button>
       </div>
@@ -161,6 +176,14 @@ function PartMenu({ part }: { part: Part }) {
             }}
           >
             Rename
+          </button>
+          <button
+            onClick={() => {
+              setOpen(false);
+              st.sendToMain({ type: 'part', id: part.id });
+            }}
+          >
+            Send to main
           </button>
           <hr />
           <button

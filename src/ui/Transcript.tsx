@@ -1,5 +1,5 @@
 import { memo, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
-import { displayWords, findPauses, outputDuration, sourceToOutput, type DisplayWord, type Pause } from '../engine/edl';
+import { displayWords, findPauses, outputDuration, sourceToOutput, wordOutputTimes, type DisplayWord, type Pause } from '../engine/edl';
 import { wordColors } from '../engine/highlights';
 import { wordParts, wordsInOutput } from '../engine/parts';
 import { HIGHLIGHT_COLORS, isSpeech, type HighlightColor, type Part, type Recording } from '../engine/types';
@@ -164,10 +164,9 @@ export function Transcript() {
   }, [recording.words, recording.highlights, display]);
 
   const waveSel = useStore((s) => s.waveSel);
-  const waveWords = useMemo(
-    () => new Set(waveSel ? wordsInOutput(display, recording.segments, waveSel.start, waveSel.end) : []),
-    [display, recording.segments, waveSel],
-  );
+  // word times are worked out once per edit, so a drag on the waveform only filters them
+  const wordTimes = useMemo(() => wordOutputTimes(display, recording.segments), [display, recording.segments]);
+  const waveWords = useMemo(() => new Set(waveSel ? wordsInOutput(wordTimes, waveSel.start, waveSel.end) : []), [wordTimes, waveSel]);
   const inParts = useMemo(() => wordParts(display, recording.parts), [display, recording.parts]);
 
   const marks: Marks = {

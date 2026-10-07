@@ -6,11 +6,13 @@
 - [x] Light/Dark/Auto theme, clearer highlights, floating Cut/Paste bar (5 Oct 2026)
 - [ ] Test cut quality on real recordings (clean 5 min, full 60 min, noisy/crosstalk). This is the POC verdict.
 - [ ] Delete `mockups/` once the UI has settled (throwaway)
-- [ ] User to choose what "add a second file" means: synced mics (recommended), append, or music bed. Then build "Add file" (ARCHITECTURE.md "Adding files")
 - [x] First commit, pushed to github.com/wakkum/yarnit (5 Oct 2026)
 - [ ] Decide English-only vs multilingual default model
 - [ ] Test on a real Windows machine (start.bat, shortcuts, export). Only verified on Mac with Windows labels simulated (5 Oct 2026)
-- [ ] Optional: host the built app (GitHub Pages or similar) so others need no install. Needs a public repo or paid plan, and the user's go-ahead
+- [x] Ready for GitHub Pages: relative asset paths, deploy workflow (skipped while private), build tested from a `/yarnit/` subfolder incl. transcription and MP3 export (6 Oct 2026)
+- [x] Commit the review fixes, Pages workflow and main timeline (7 Oct 2026)
+- [ ] Decide on `.claude/launch.json` (commit or .gitignore)
+- [ ] Make the repo public, then Settings > Pages > Source: GitHub Actions. Decide on a dedicated address (custom domain) so saved recordings are not shared with other `github.io` sites of the account
 
 ## Milestone 2: Reorder and search
 - [x] Keyboard cut/paste move (Cmd+X, click target, Cmd+V)
@@ -31,16 +33,20 @@
 
 ## Projects (6 Oct 2026)
 - [x] Projects with several recordings, collapsible sidebar, "What is this recording?" on add, background transcription queue, v1 saves migrated
-- [ ] **User testing** of projects before the main timeline
-- [ ] Main timeline: Send to main (copy) from a recording, whole edit or chosen colours; its own transcript, waveform, editing and export
+- [ ] **User testing** of projects and the main timeline on real recordings
+- [x] Main timeline: Send to main (copy) from a recording: whole edit, selection, colours, parts; its own transcript, lanes, editing, undo and mixed export (7 Oct 2026)
 - [x] Parts for music and sound effects: mark pieces on the waveform, pads to play and rename (6 Oct 2026)
 - [x] Waveform selection on speech too: Delete, Add as part, parts strip and marks in the transcript (6 Oct 2026)
-- [ ] Music and sound effects on the main timeline (own lane): Send to main per part, fades, volume under speech
+- [x] Music and sound effects on the main timeline, each kind its own lane: Send to main per part, drag to place, volume, fade in/out (7 Oct 2026)
+- [x] Send all parts of a recording to main at once (7 Oct 2026)
+- [ ] Main timeline: anchor a music or effect clip to a speech clip so it moves when speech before it is cut
+- [ ] Main timeline: trim or split a clip in place (today: cut words, or send a different part)
+- [ ] Main timeline: show which clips are out of date after their recording was edited, with a Replace option
 - [ ] Reorder recordings in the sidebar (drag)
 
 ## Highlights
 - [x] Six-colour highlights, marker look, Highlights panel with passages and colour meanings, timeline strips (5 Oct 2026)
-- [ ] **Send chosen colours to a main timeline.** Design: highlight spans become the segments of a new edit (in transcript order), so the project needs more than one edit ("timelines": source edit + main). Decide with the user: replace the edit (undoable) vs a separate main timeline you can switch to, and whether a passage can be reordered there. With multitrack, each span takes every track.
+- [x] Send chosen colours to the main timeline, one clip per passage (Send to main menu and the Highlights panel, 7 Oct 2026)
 - [ ] Filter the transcript to one colour, and step through passages from the keyboard
 
 ## Milestone 3: Multitrack

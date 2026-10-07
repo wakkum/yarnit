@@ -72,9 +72,41 @@ export type Recording = {
 };
 
 /**
- * A project: several recordings, each edited on its own. (The main timeline, where passages are
- * copied to build the final version, will live here too.)
+ * A piece of a recording copied onto the main timeline (mockups/main-a-lanes.html, picked 7 Oct 2026
+ * with one lane per kind). It keeps its own copy of the words and cut list it was sent with, so
+ * later edits to the recording don't change it; it plays the recording's stored audio (`trackId`).
  */
+export type MainClip = {
+  id: string;
+  name: string;
+  /** Lane: the kind of the recording it came from. */
+  kind: RecordingKind;
+  recordingId: string;
+  trackId: string;
+  /** Source spans of the recording, in play order (like `Recording.segments`). */
+  segments: Segment[];
+  /** Copied words (new ids) inside those spans; empty for music and sound effects. */
+  words: Word[];
+  /** Copied speaker names, for the transcript labels. */
+  speakers: Speaker[];
+  /** Volume, 1 = as recorded. */
+  gain: number;
+  /** Fade in / fade out length in seconds (0 = none). */
+  fadeIn: number;
+  fadeOut: number;
+  /** Speech: seconds of silence before it in the running order. */
+  gap: number;
+  /** Music and sound effects: where it starts on the main timeline, seconds. */
+  at: number;
+};
+
+/**
+ * The main timeline. Speech clips (interview, voice-over) play one after another in array order,
+ * each after its `gap`; music and sound-effect clips start at their own `at` and may overlap anything.
+ */
+export type MainTimeline = { clips: MainClip[] };
+
+/** A project: several recordings, each edited on its own, and the main timeline built from them. */
 export type Project = {
   id: string;
   name: string;
@@ -82,4 +114,7 @@ export type Project = {
   recordingIds: string[];
   /** The recording that was open last, so the project reopens on it. */
   lastRecordingId?: string;
+  /** True when the main timeline was open last (it then reopens instead of a recording). */
+  mainOpen?: boolean;
+  main?: MainTimeline;
 };

@@ -5,19 +5,23 @@ import { isSpeech } from '../engine/types';
 import { searchHits } from '../engine/view';
 import { useStore, type Settings } from '../state/store';
 import { combo, isMac } from './keys';
+import { SendMenu } from './SendMenu';
 import { clock } from './time';
 
 export function TopBar() {
   const recording = useStore((s) => s.recording);
   const query = useStore((s) => s.query);
   const hitIndex = useStore((s) => s.hitIndex);
-  const canUndo = useStore((s) => s.past.length > 0);
-  const canRedo = useStore((s) => s.future.length > 0);
+  const mainOpen = useStore((s) => s.mainOpen);
+  const mainEmpty = useStore((s) => !s.project?.main?.clips.length);
+  const canUndo = useStore((s) => (s.mainOpen ? s.mainPast : s.past).length > 0);
+  const canRedo = useStore((s) => (s.mainOpen ? s.mainFuture : s.future).length > 0);
   const phase = useStore((s) => s.phase);
   const panel = useStore((s) => s.panel);
   const helpOpen = panel === 'help';
   const settings = useStore((s) => s.settings);
-  const { setQuery, stepHit, deleteHits, undo, redo, removeFillers, exportAudio, setPanel, setSettings } = useStore.getState();
+  const { setQuery, stepHit, deleteHits, undo, redo, removeFillers, exportAudio, exportMain, setPanel, setSettings } = useStore.getState();
+  const doExport = (format: 'mp3' | 'wav') => void (mainOpen ? exportMain(format) : exportAudio(format));
   const [menu, setMenu] = useState(false);
   const menuRef = useRef<HTMLDivElement>(null);
 
@@ -41,16 +45,16 @@ export function TopBar() {
   }, [menu]);
 
   const busy = phase === 'decoding' || phase === 'exporting';
-  // music and sound effects have no transcript to search, highlight or tidy
-  const speech = !recording || isSpeech(recording.kind);
+  // music and sound effects (and the main timeline) have no transcript to search, highlight or tidy
+  const speech = !!recording && isSpeech(recording.kind);
 
   return (
     <header className="top">
       <span className="name">
-        {recording ? recording.name : 'Yarnit'}
+        {mainOpen ? 'Main timeline' : recording ? recording.name : 'Yarnit'}
         {recording && <SaveState />}
       </span>
-      {recording && (
+      {(recording || mainOpen) && (
         <>
           {speech && (
           <div className="search">
@@ -107,9 +111,15 @@ export function TopBar() {
           </button>
           </>
           )}
+          {recording && <SendMenu recording={recording} />}
           <ProjectsToggle />
           <div className="menu" ref={menuRef}>
-            <button className="primary" onClick={() => setMenu(!menu)} disabled={busy}>
+            <button
+              className="primary"
+              onClick={() => setMenu(!menu)}
+              disabled={busy || (mainOpen && mainEmpty)}
+              title={mainOpen ? 'Mix every lane into one audio file' : undefined}
+            >
               Export
             </button>
             {menu && (
@@ -118,7 +128,7 @@ export function TopBar() {
                   role="menuitem"
                   onClick={() => {
                     setMenu(false);
-                    void exportAudio('mp3');
+                    doExport('mp3');
                   }}
                 >
                   MP3 <small>192 kbps, small file</small>
@@ -127,7 +137,7 @@ export function TopBar() {
                   role="menuitem"
                   onClick={() => {
                     setMenu(false);
-                    void exportAudio('wav');
+                    doExport('wav');
                   }}
                 >
                   WAV <small>16-bit, full quality</small>
@@ -137,7 +147,7 @@ export function TopBar() {
           </div>
         </>
       )}
-      {!recording && <ProjectsToggle />}
+      {!recording && !mainOpen && <ProjectsToggle />}
       <div className="theme" role="group" aria-label="Theme">
         {(['auto', 'light', 'dark'] as Settings['theme'][]).map((t) => (
           <button

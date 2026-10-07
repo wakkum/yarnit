@@ -20,6 +20,7 @@ export function Waveform({
   pieces,
   from = 0,
   samples,
+  level,
 }: {
   peaks: Float32Array | undefined;
   color: string;
@@ -30,6 +31,8 @@ export function Waveform({
   from?: number;
   /** The 16 kHz copy: zoomed in past the peaks' resolution, bars are read from it directly. */
   samples?: Float32Array | null;
+  /** Height factor at axis time t (0 to 1), so a quiet or fading clip looks quiet. */
+  level?: (t: number) => number;
 }) {
   const ref = useRef<HTMLCanvasElement>(null);
   useEffect(() => {
@@ -70,6 +73,7 @@ export function Waveform({
         } else {
           v = peaks[Math.min(peaks.length - 1, Math.max(0, Math.floor((src / source) * peaks.length)))] / max;
         }
+        if (level) v *= Math.min(1, level(t));
         const amp = Math.max(1, v * (h / 2 - 2));
         g.fillStyle = isMoved ? moved : main;
         g.fillRect(x, h / 2 - amp, bar, amp * 2);
@@ -79,6 +83,6 @@ export function Waveform({
     const ro = new ResizeObserver(draw);
     ro.observe(canvas);
     return () => ro.disconnect();
-  }, [peaks, color, source, length, pieces, from, samples]);
+  }, [peaks, color, source, length, pieces, from, samples, level]);
   return <canvas ref={ref} />;
 }

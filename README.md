@@ -53,4 +53,10 @@ A project holds several recordings (interviews, voice-overs, music, sound effect
 | `npm run build` | Typecheck and production build into `dist/` |
 | `npm run sample` | Regenerate `test-audio/sample.wav` (macOS only: uses the `say` voice) |
 
+### Hosting on GitHub Pages
+
+`.github/workflows/pages.yml` builds, checks and publishes the app on every push to `main`. It is skipped while the repository is private. Once it is public, turn it on in **Settings > Pages > Build and deployment > Source: GitHub Actions**; the app then runs at `https://<owner>.github.io/yarnit/`. Asset paths are relative (`base: './'` in `vite.config.ts`), so the same build works at any path.
+
+Privacy note: saved recordings live in the browser's storage for the site's address. On `<owner>.github.io` that address is shared by every Pages site of that account, so any of them could read what users saved in Yarnit. For a workshop with real interviews, give Yarnit its own address (a custom domain, or an account or organisation that publishes nothing else on Pages).
+
 See [ARCHITECTURE.md](ARCHITECTURE.md) for how it works and [TODO.md](TODO.md) for what's next.

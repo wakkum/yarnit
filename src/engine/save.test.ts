@@ -90,6 +90,15 @@ describe('projects', () => {
     expect(fromSavedProject({ version: 2, project: {} })).toBeNull();
   });
 
+  it('keep the main timeline, dropping clips that cannot play and fixing bad numbers', () => {
+    const good = { id: 'c1', name: 'Bed', kind: 'music', recordingId: 'r1', trackId: 't1', segments: [{ id: 's', start: 0, end: 5 }], words: [], speakers: [], gain: 9, fadeIn: -1, fadeOut: 2, gap: 0, at: 3 };
+    const saved = { version: 2, savedAt: 1, project: { ...project, mainOpen: true, main: { clips: [good, { ...good, id: 'c2', kind: 'banjo' }, { ...good, id: 'c3', segments: [] }, null] } } };
+    const back = fromSavedProject(JSON.parse(JSON.stringify(saved)))!.project;
+    expect(back.mainOpen).toBe(true);
+    expect(back.main!.clips.map((c) => c.id)).toEqual(['c1']);
+    expect(back.main!.clips[0]).toMatchObject({ gain: 2, fadeIn: 0, fadeOut: 2, at: 3 });
+  });
+
   it('summarize over their own recordings only, newest save wins', () => {
     const a = summarizeRecording(toSavedRecording(recording, true, 50));
     const other = { ...a, id: 'zz', edited: 99 };

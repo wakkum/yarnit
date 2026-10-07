@@ -8,7 +8,8 @@ const STEPS: [string, ReactNode][] = [
   ['Add recordings', <>Drop MP3, WAV or M4A files onto the page or the sidebar, or click <b>+ Add recordings</b>. Say what each one is: interviews and voice-overs get a transcript, music and sound effects don't.</>],
   ['Wait for the transcript', 'It is made on this computer. The first time, the speech model downloads once.'],
   ['Edit the text', <>Select words and press <kbd>Delete</kbd>. They are cut from the audio too.</>],
-  ['Export', <>Play it back to check, then <b>Export</b> as MP3 or WAV.</>],
+  ['Build the final version', <>Use <b>Send to main</b> on each recording (the whole edit, the selected words, a highlight colour or a part), then open <b>Main timeline</b> in the sidebar to arrange them.</>],
+  ['Export', <>Play it back to check, then <b>Export</b> as MP3 or WAV. On the main timeline, Export mixes every lane into one file.</>],
 ];
 
 const KEYS: [string, ReactNode][] = [
@@ -26,6 +27,8 @@ const KEYS: [string, ReactNode][] = [
   ['Highlight in a colour', <>Select words, then click a colour in the bar, or press <kbd>1</kbd> to <kbd>6</kbd>. <kbd>0</kbd> removes it</>],
   ['Rename a speaker', 'Click the speaker name next to a paragraph'],
   ['Shorten one pause', 'Click its chip (for example 2.4 s) in the transcript'],
+  ['Main timeline: select a clip', <>Click it to set its volume, fades and the pause before it. Drag a music or effect clip to move it, drag the small squares to set its fades. <kbd>Esc</kbd> deselects</>],
+  ['Main timeline: cut words', <>Select words in a clip's transcript and press <kbd>Delete</kbd>. Only that clip changes, not the recording</>],
   ['Clear selection, cut or search', <><kbd>Esc</kbd></>],
   ['Open or close this help', <><kbd>?</kbd></>],
 ];
@@ -34,7 +37,7 @@ const FAQ: [string, string][] = [
   ['Is my audio uploaded anywhere?', 'No. Transcription, editing and export all run in your browser. The only download is the speech model, once.'],
   ['Does editing change my original file?', 'No. The original is never touched. Cuts are applied when you export, and you can undo at any time.'],
   ['Why is the first transcript slow?', 'The speech model (40 to 250 MB) downloads the first time. After that your browser keeps it. For more speed, pick the Fastest model or try the GPU engine before opening a file.'],
-  ['What are highlights for?', 'Mark important passages in up to six colours. Highlights opens a list of every highlighted passage by colour; click one to jump to it, and give a colour a meaning such as "Must keep". Next, you will be able to send chosen colours to a main timeline. Highlights do not change the audio, and Undo covers them.'],
+  ['What are highlights for?', 'Mark important passages in up to six colours. Highlights opens a list of every highlighted passage by colour; click one to jump to it, and give a colour a meaning such as "Must keep". Send to main can send every passage in one colour to the main timeline, one clip per passage. Highlights do not change the audio, and Undo covers them.'],
   ['How do I name the speakers?', 'Click the name next to any paragraph. Rename it there, or say the paragraph is by someone else (or a new speaker). Undo works for this too.'],
   ['How do I cut out dead air?', 'Long pauses show as small chips such as "2.4 s" in the transcript. Click one to shorten just that pause, or use Shorten pauses in the top bar to shorten all of them. You choose how long a pause must be and what it becomes.'],
   ['Remove fillers missed some "um"s. Why?', 'The speech model often leaves fillers out of the transcript, so there is no word to remove. Listen, then select the words around it and cut by hand.'],
@@ -43,8 +46,9 @@ const FAQ: [string, string][] = [
   ['MP3 or WAV?', 'MP3 (192 kbps) is small and good for sharing. WAV is full quality, best if you will edit it further elsewhere.'],
   ['How do I start over on a file?', 'Reset timeline (next to the play button, shown once you have edited) brings back every cut and undoes every move, after asking first. The transcript, highlights and speaker names stay, and Undo can take the reset back.'],
   ['Is my work saved?', 'Yes, automatically after every change, in this browser on this computer. Next time, Yarnit reopens the project and recording you last worked on. Projects (top bar, or ▾ next to the project name) lists the others. Undo history starts fresh when you switch or reopen. Clearing your browser data removes saved projects, so export anything you want to keep.'],
-  ['How do projects and recordings work?', 'A project holds several recordings: interviews, voice-overs, music, sound effects. Each recording has its own transcript and edit; click one in the sidebar to work on it. Transcription runs in the background, one recording at a time, so you can edit one while the next is transcribed. Use ⋯ on a recording to rename it, change what it is, or delete it, and ☰ to fold the sidebar. Next step: a main timeline where you combine them into the final version.'],
-  ['What are parts?', 'Pieces of a recording you want to use, each with a name and colour, for example Intro, Bed or Sting from a music file, or the best quote from an interview. Drag across the waveform, then click Add as part (or press Enter). Drag a part\'s edges on the waveform to adjust it, and click its name to rename it. Music and sound effects show their parts as pads instead of a transcript and are never cut; in an interview, parts sit in a strip under the waveform and are marked in the transcript with a coloured bar and a name tag. Parts may overlap, and each one will go to the main timeline on its own, as often as you like.'],
+  ['How do projects and recordings work?', 'A project holds several recordings: interviews, voice-overs, music, sound effects. Each recording has its own transcript and edit; click one in the sidebar to work on it. Transcription runs in the background, one recording at a time, so you can edit one while the next is transcribed. Use ⋯ on a recording to rename it, change what it is, or delete it, and ☰ to fold the sidebar. Combine them into the final version on the main timeline.'],
+  ['What are parts?', 'Pieces of a recording you want to use, each with a name and colour, for example Intro, Bed or Sting from a music file, or the best quote from an interview. Drag across the waveform, then click Add as part (or press Enter). Drag a part\'s edges on the waveform to adjust it, and click its name to rename it. Music and sound effects show their parts as pads instead of a transcript and are never cut; in an interview, parts sit in a strip under the waveform and are marked in the transcript with a coloured bar and a name tag. Parts may overlap, and each one can go to the main timeline on its own (Send to main on the pad or in its ⋯ menu), as often as you like. With two or more parts, Send all to main sends every part at once; music and effects then line up one after another.'],
+  ['How does the main timeline work?', 'It is where you combine recordings into the final version. Send to main copies a piece of a recording into it as a clip, so later edits to the recording do not change the clip (send it again if you want the new version). Every kind has its own lane. Interview and voice-over clips play one after another in running order: use the arrows to change the order and Pause before to add a gap. Music and sound effects start where you drag them and play under the voice, so they do not move when you cut speech before them. Click a clip to set its volume (for example 30% for a music bed), and a fade in and fade out. The main timeline has its own Undo.'],
   ['Can I switch between light and dark?', 'Yes, with Auto / Light / Dark at the top right. Auto follows your computer. Your choice is remembered in this browser.'],
   ['Which browser should I use?', 'Chrome or Edge. Other browsers may work but are untested.'],
 ];

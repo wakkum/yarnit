@@ -264,6 +264,57 @@ export function outputToSource(segments: Segment[], ot: number): { index: number
   return null;
 }
 
+/** Output time -> source time, where the very end of the edit maps to the end of the last segment. */
+export function outputToSourceAt(segments: Segment[], ot: number): number {
+  const at = outputToSource(segments, ot);
+  if (at) return at.source;
+  return segments.at(-1)?.end ?? ot;
+}
+
+/** The source slices that play during output seconds a..b, in playback order. */
+export function sourceSlices(segments: Segment[], a: number, b: number): [number, number][] {
+  const out: [number, number][] = [];
+  let acc = 0;
+  for (const s of segments) {
+    const len = s.end - s.start;
+    const from = Math.max(0, a - acc);
+    const to = Math.min(len, b - acc);
+    acc += len;
+    if (to > from) out.push([s.start + from, s.start + to]);
+  }
+  return out;
+}
+
+/**
+ * Output time of each kept word's midpoint, in one pass: kept words come in playback order, segment
+ * by segment (displayWords), so the segment walk only moves forward.
+ */
+export function wordOutputTimes(display: DisplayWord[], segments: Segment[]): Map<string, number> {
+  const out = new Map<string, number>();
+  let si = 0;
+  let acc = 0;
+  for (const d of display) {
+    if (d.deleted) continue;
+    const m = mid(d.word);
+    let i = si;
+    let at = acc;
+    while (i < segments.length && !(m >= segments[i].start && m < segments[i].end)) {
+      at += segments[i].end - segments[i].start;
+      i++;
+    }
+    if (i < segments.length) {
+      si = i;
+      acc = at;
+      out.set(d.word.id, acc + m - segments[i].start);
+    } else {
+      // not found ahead (should not happen): fall back to a full search
+      const t = sourceToOutput(segments, m);
+      if (t != null) out.set(d.word.id, t);
+    }
+  }
+  return out;
+}
+
 /** Common English fillers. Whisper often omits these; see ARCHITECTURE.md "Known limits". */
 export const FILLERS = ['um', 'uh', 'erm', 'er', 'hmm', 'mm', 'ah', 'uhm', 'umm'];
 

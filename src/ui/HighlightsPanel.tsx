@@ -1,5 +1,5 @@
 // Highlights panel (mockups/hl-b-bin.html, with the marker look of hl-a-marker.html, picked 5 Oct 2026):
-// every highlighted passage grouped by colour, like a bin of clips, plus the later "main timeline" step.
+// every highlighted passage grouped by colour, like a bin of clips, plus a step that sends chosen colours to the main timeline.
 import { useMemo, useState } from 'react';
 import { displayWords } from '../engine/edl';
 import { passages, wordColors, type Passage } from '../engine/highlights';
@@ -11,7 +11,8 @@ import { fmt } from './util';
 
 export function HighlightsPanel() {
   const recording = useStore((s) => s.recording);
-  const { setPanel } = useStore.getState();
+  const transcribed = useStore((s) => s.transcribed);
+  const { setPanel, sendToMain } = useStore.getState();
   const [pick, setPick] = useState<Set<HighlightColor>>(new Set(['red']));
 
   const list = useMemo(() => {
@@ -71,11 +72,16 @@ export function HighlightsPanel() {
           ))}
         </div>
         <p className="note">
-          Puts only the chosen colours, in transcript order, on a new main timeline. With multitrack it will take those
-          moments from every track.
+          Sends every passage in the chosen colours to the main timeline, one clip per passage, in transcript order. They
+          go after the clips already there.
         </p>
-        <button className="primary" disabled style={{ width: '100%' }}>
-          Send to main timeline (coming next)
+        <button
+          className="primary"
+          disabled={!transcribed || !list.some((p) => pick.has(p.color))}
+          onClick={() => sendToMain({ type: 'colors', colors: HIGHLIGHT_COLORS.filter((c) => pick.has(c)) })}
+          style={{ width: '100%' }}
+        >
+          Send to main timeline
         </button>
       </div>
     </aside>

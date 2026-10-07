@@ -13,7 +13,7 @@ export function AddDialog() {
   const [items, setItems] = useState<PendingFile[]>(pending ?? []);
   if (!pending) return null;
   const { confirmAdd, cancelAdd } = useStore.getState();
-  const setKind = (i: number, kind: RecordingKind) => setItems(items.map((it, j) => (j === i ? { ...it, kind } : it)));
+  const setKind = (i: number, kind: RecordingKind) => setItems((list) => list.map((it, j) => (j === i ? { ...it, kind } : it)));
   const one = items.length === 1;
 
   return (

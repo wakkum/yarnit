@@ -10,6 +10,9 @@ export const fmt = (s: number) => {
   return h ? `${h}:${String(m).padStart(2, '0')}:${sec}` : `${m}:${sec}`;
 };
 
+/** Short lengths in tenths (3.0 s), longer ones as M:SS. */
+export const seconds = (t: number) => (t < 60 ? `${t.toFixed(1)} s` : fmt(t));
+
 /** "0:06.4 to 0:41.0 · 34.6 s": parts are often short, so tenths matter. */
 export const rangeLabel = (a: number, b: number) => {
   const t = (x: number) => {
@@ -72,4 +75,21 @@ export function usePlayheadValue<T>(recording: Recording | null, derive: (out: n
   const [value, setValue] = useState<T>(initial);
   usePlayhead(recording, (o, s) => setValue(derive(o, s)));
   return value;
+}
+
+/** Calls fn every animation frame with the main playhead (seconds). */
+export function useMixPlayhead(fn: (t: number) => void) {
+  const ref = useRef(fn);
+  useEffect(() => {
+    ref.current = fn;
+  });
+  useEffect(() => {
+    let raf = 0;
+    const tick = () => {
+      ref.current(media.mix?.currentTime ?? 0);
+      raf = requestAnimationFrame(tick);
+    };
+    raf = requestAnimationFrame(tick);
+    return () => cancelAnimationFrame(raf);
+  }, []);
 }

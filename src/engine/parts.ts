@@ -1,6 +1,6 @@
 // Parts of a music or sound-effects recording: named source spans, kept sorted by start.
-import { newId, sourceToOutput, type DisplayWord } from './edl';
-import { HIGHLIGHT_COLORS, type Part, type Segment } from './types';
+import { newId, type DisplayWord } from './edl';
+import { HIGHLIGHT_COLORS, type Part } from './types';
 
 /** Shortest part, so an accidental click can't make an empty one. */
 export const MIN_PART = 0.1;
@@ -39,9 +39,11 @@ export function setPartEdge(parts: Part[], id: string, edge: 'start' | 'end', t:
   );
 }
 
+/** Rename; a blank or unchanged name returns `parts` itself, so no undo step is made. */
 export function renamePart(parts: Part[], id: string, name: string): Part[] {
   const clean = name.trim();
-  return clean ? parts.map((p) => (p.id === id ? { ...p, name: clean } : p)) : parts;
+  if (!clean || parts.find((p) => p.id === id)?.name === clean) return parts;
+  return parts.map((p) => (p.id === id ? { ...p, name: clean } : p));
 }
 
 export const removePart = (parts: Part[], id: string) => parts.filter((p) => p.id !== id);
@@ -60,15 +62,24 @@ export function labelRows(spans: { start: number; width: number }[]): number[] {
   });
 }
 
-/** Kept words that play inside output seconds a..b (by their midpoint): what a waveform selection covers. */
-export function wordsInOutput(display: DisplayWord[], segments: Segment[], a: number, b: number): string[] {
-  return display
-    .filter((d) => {
-      if (d.deleted) return false;
-      const t = sourceToOutput(segments, (d.word.start + d.word.end) / 2);
-      return t != null && t >= a && t <= b;
-    })
-    .map((d) => d.word.id);
+/** Kept words that play inside output seconds a..b (by their midpoint; times from `wordOutputTimes`). */
+export function wordsInOutput(times: Map<string, number>, a: number, b: number): string[] {
+  const out: string[] = [];
+  for (const [id, t] of times) if (t >= a && t <= b) out.push(id);
+  return out;
+}
+
+/**
+ * One source span for a part from the source slices a selection covers (`sourceSlices`). Slices in
+ * source order (only cuts between them) become one span from the first to the last; a selection
+ * that crosses a moved passage can't be one span, so the longest slice is used (`whole` false).
+ */
+export function spanFromSlices(slices: [number, number][]): { start: number; end: number; whole: boolean } | null {
+  if (!slices.length) return null;
+  const ordered = slices.every((x, i) => i === 0 || x[0] >= slices[i - 1][1] - 1e-6);
+  if (ordered) return { start: slices[0][0], end: slices.at(-1)![1], whole: true };
+  const [start, end] = slices.reduce((m, x) => (x[1] - x[0] > m[1] - m[0] ? x : m));
+  return { start, end, whole: false };
 }
 
 /**

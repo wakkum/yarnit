@@ -108,6 +108,7 @@ select { background: var(--panel); border: 1px solid var(--line); border-radius:
 /* timeline */
 .timeline { background: var(--panel); border-bottom: 1px solid var(--line); padding: 10px 20px 14px; }
 .transport { display: flex; align-items: center; gap: 12px; margin-bottom: 10px; min-height: 36px; }
+.transport .mono { white-space: nowrap; }
 .play { width: 36px; height: 36px; border-radius: 50%; padding: 0; background: var(--accent); color: #fff; border: 0; flex: none; }
 .progress { flex: 1; max-width: 360px; height: 6px; background: var(--line); border-radius: 3px; overflow: hidden; }
 .progress > div { height: 100%; background: var(--accent); transition: width .3s; }
@@ -247,6 +248,8 @@ kbd { font: 12px ui-monospace, monospace; border: 1px solid var(--line); border-
   .timeline, .doc { padding-left: 16px; padding-right: 16px; }
   .lane { grid-template-columns: 1fr; }
   .lane-head { display: none; }
+  /* main lanes have no other label, so keep a slim one above each lane */
+  .mlane .lane-head { display: flex; flex-direction: row; align-items: center; gap: 8px; padding: 2px 8px; min-height: 0; }
   .ruler { margin-left: 0; }
   .para { grid-template-columns: 1fr; gap: 2px; }
   .para-label { flex-direction: row; gap: 8px; }
@@ -456,3 +459,48 @@ kbd { font: 12px ui-monospace, monospace; border: 1px solid var(--line); border-
   .side:not(.rail) { width: 210px; }
   .kinds { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 }
+
+/* main timeline (mockups/main-a-lanes.html, one lane per kind) */
+.main-item { cursor: pointer; }
+.mruler { cursor: pointer; }
+.mlane .lane-head b { display: flex; align-items: center; gap: 6px; }
+.mlane .lane-head .ico { width: 18px; height: 18px; font-size: 9px; border-radius: 5px; }
+.mlane-body { cursor: default; background: var(--bg); }
+.lane-empty { position: absolute; left: 10px; top: 50%; transform: translateY(-50%); font-size: 12px; color: var(--muted); pointer-events: none; white-space: nowrap; }
+.mclip { position: absolute; border-radius: 6px; background: color-mix(in srgb, var(--c) 16%, var(--panel)); border: 1.5px solid color-mix(in srgb, var(--c) 70%, transparent); overflow: hidden; cursor: grab; touch-action: none; min-width: 3px; }
+.mclip:active { cursor: grabbing; }
+.mclip.on { border-color: var(--accent); box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent) 35%, transparent); z-index: 2; }
+.mclip canvas { position: absolute; inset: 0; width: 100%; height: 100%; opacity: .75; }
+.mclip b { position: absolute; top: 1px; left: 5px; font-size: 11px; line-height: 15px; white-space: nowrap; pointer-events: none; text-shadow: 0 0 3px var(--panel), 0 0 3px var(--panel); }
+.mclip .fades { position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; }
+.mclip .fades polyline { fill: none; stroke: var(--fg); stroke-width: 1.5; stroke-dasharray: 4 3; opacity: .6; vector-effect: non-scaling-stroke; }
+.fade-handle { position: absolute; top: 0; width: 10px; height: 10px; margin: 0 -5px; border-radius: 2px; background: var(--accent); border: 1.5px solid var(--panel); cursor: ew-resize; z-index: 3; }
+.inspector { display: flex; align-items: center; gap: 10px 14px; flex-wrap: wrap; margin-top: 10px; padding: 8px 12px; border: 1px solid var(--line); border-radius: 10px; background: var(--bg); font-size: 12px; }
+.inspector button { padding: 3px 9px; font-size: 12px; }
+.insp-name { font-weight: 600; font-size: 13px; padding: 3px 6px; border: 1px solid var(--line); border-radius: 6px; background: var(--panel); width: 180px; min-width: 0; }
+.insp-vol, .insp-num { display: inline-flex; align-items: center; gap: 6px; }
+.insp-vol input { width: 120px; accent-color: var(--accent); }
+.insp-vol .mono { min-width: 36px; }
+.insp-num input { width: 56px; padding: 2px 5px; border: 1px solid var(--line); border-radius: 6px; background: var(--panel); }
+.main-doc .main-clip { margin-bottom: 8px; border-radius: 10px; }
+.main-doc .main-clip.on .cliphead { border-color: var(--accent); }
+.cliphead { display: flex; align-items: center; gap: 8px; font-size: 12px; margin: 18px 0 10px; padding: 4px 6px 4px 8px; border: 1px solid var(--line); border-radius: 8px; background: var(--panel); }
+.cliphead .ico { width: 20px; height: 20px; font-size: 9px; border-radius: 5px; }
+.clip-name { all: unset; font-weight: 600; font-size: 13px; cursor: pointer; border-radius: 4px; padding: 0 2px; }
+.clip-name:hover { background: var(--bg); }
+.clip-name:focus-visible { outline: 2px solid var(--accent); }
+.clip-arrows { margin-left: auto; display: flex; gap: 2px; }
+.clip-arrows button { padding: 1px 8px; }
+.main-selbar { position: sticky; top: 0; z-index: 5; display: flex; align-items: center; gap: 8px; padding: 6px 10px; border: 1px solid var(--accent); border-radius: 10px; background: var(--panel); font-size: 13px; }
+.main-selbar span { flex: 1; }
+.main-empty p { line-height: 1.6; max-width: 70ch; }
+.send-toggle { border-color: var(--accent); color: var(--accent); }
+.send-menu .menu-list { width: 300px; }
+.send-menu .menu-list button { display: flex; align-items: center; gap: 8px; }
+.send-menu .menu-list button small { margin-left: auto; }
+.send-menu .menu-list .sec { font-size: 11px; color: var(--muted); padding: 8px 10px 2px; }
+.send-menu .dot { width: 9px; height: 9px; border-radius: 50%; flex: none; }
+.send-note { margin: 6px 8px 4px; font-size: 11px; color: var(--muted); line-height: 1.4; }
+.clip-nowords { margin: 0 0 12px 104px; font-size: 13px; }
+.parts h3 .send-all { margin-left: 10px; vertical-align: 2px; }
+.send-all { padding: 3px 10px; font-size: 12px; white-space: nowrap; flex: none; }

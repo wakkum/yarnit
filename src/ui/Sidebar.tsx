@@ -1,8 +1,9 @@
-// Project sidebar (mockups/files-c-collapsible.html, picked 6 Oct 2026): the project's recordings,
-// folding to a rail of icons. The main timeline entry is a placeholder until that step is built.
+// Project sidebar (mockups/files-c-collapsible.html, picked 6 Oct 2026): the main timeline and the
+// project's recordings, folding to a rail of icons.
 import { useEffect, useRef, useState } from 'react';
 import type { RecordingSummary } from '../engine/save';
 import { isSpeech, RECORDING_KINDS, type RecordingKind } from '../engine/types';
+import { mainLength } from '../state/mainSlice';
 import { useStore } from '../state/store';
 import { KIND_ICON, KIND_LABEL } from './kinds';
 import { fmt } from './util';
@@ -21,6 +22,9 @@ export function Sidebar() {
   const recordings = useStore((s) => s.recordings);
   const openId = useStore((s) => s.recording?.id);
   const mode = useStore((s) => s.settings.sidebar);
+  const mainOpen = useStore((s) => s.mainOpen);
+  const mainLen = useStore(mainLength);
+  const mainClips = useStore((s) => s.project?.main?.clips.length ?? 0);
   const { setSettings, addFiles } = useStore.getState();
   const input = useRef<HTMLInputElement>(null);
   const [over, setOver] = useState(false);
@@ -56,9 +60,9 @@ export function Sidebar() {
     return (
       <aside className="side rail" aria-label="Recordings">
         {toggle}
-        <span className="ico k-main off" title="Main timeline (next step)">
-          ▤
-        </span>
+        <button className={`rail-item${mainOpen ? ' on' : ''}`} title="Main timeline" onClick={() => !mainOpen && void useStore.getState().openMain()}>
+          <span className="ico k-main">▤</span>
+        </button>
         {recordings.map((r) => (
           <button
             key={r.id}
@@ -97,10 +101,17 @@ export function Sidebar() {
         {toggle}
         <ProjectName key={project.name} name={project.name} />
       </div>
-      <div className="item off" title="Coming next: send passages from your recordings here to build the final version">
+      <div
+        className={`item main-item${mainOpen ? ' on' : ''}`}
+        role="button"
+        tabIndex={0}
+        onClick={() => !mainOpen && void useStore.getState().openMain()}
+        onKeyDown={(e) => e.key === 'Enter' && !mainOpen && void useStore.getState().openMain()}
+        title="The final version: clips sent from your recordings, mixed on lanes"
+      >
         <span className="ico k-main">▤</span>
         <span className="nm">Main timeline</span>
-        <small>next step</small>
+        <small className="mono">{mainClips ? fmt(mainLen) : 'empty'}</small>
       </div>
       <h4>Recordings</h4>
       {recordings.map((r) => (
@@ -238,7 +249,9 @@ function Item({ r, open }: { r: RecordingSummary; open: boolean }) {
             className="danger"
             onClick={() => {
               setMenu(false);
-              if (confirm(`Delete ${r.name} from this project? Its transcript and edits are removed from this browser. Your original audio file is not touched.`))
+              const used = st.project?.main?.clips.filter((c) => c.recordingId === r.id).length ?? 0;
+              const also = used ? ` ${used} clip${used === 1 ? '' : 's'} on the main timeline come${used === 1 ? 's' : ''} from it and will be removed too.` : '';
+              if (confirm(`Delete ${r.name} from this project? Its transcript and edits are removed from this browser.${also} Your original audio file is not touched.`))
                 void st.deleteRecording(r.id);
             }}
           >

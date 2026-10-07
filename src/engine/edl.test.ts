@@ -9,9 +9,11 @@ import {
   moveWords,
   outputDuration,
   outputToSource,
+  outputToSourceAt,
   removeOutputRange,
   removeSpan,
   shortenPauses,
+  sourceSlices,
   sourceToOutput,
 } from './edl';
 import type { Word } from './types';
@@ -228,5 +230,18 @@ describe('removeOutputRange', () => {
   it('leaves the edit alone outside it', () => {
     const segs = [seg('a', 0, 5)];
     expect(removeOutputRange(segs, 6, 8)).toEqual(segs);
+  });
+});
+
+describe('output to source helpers', () => {
+  const segs = [{ id: 'a', start: 20, end: 25 }, { id: 'b', start: 0, end: 5 }];
+  it('map the very end of the edit to the end of the last segment', () => {
+    expect(outputToSourceAt(segs, 2)).toBe(22);
+    expect(outputToSourceAt(segs, 10)).toBe(5);
+    expect(outputToSourceAt([], 3)).toBe(3);
+  });
+  it('list the source slices an output range plays', () => {
+    expect(sourceSlices(segs, 3, 7)).toEqual([[23, 25], [0, 2]]);
+    expect(sourceSlices(segs, 0, 10)).toEqual([[20, 25], [0, 5]]);
   });
 });

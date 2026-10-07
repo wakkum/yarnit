@@ -36,14 +36,19 @@ export class Player {
     this.tracks = tracks;
   }
 
-  /** Swap the edit list. Keeps playing from the same output time if playing. */
+  /**
+   * Swap the edit list. Keeps playing from the same output time if playing; playing one range (a part)
+   * stops instead, because its end no longer means the same moment in the new edit.
+   */
   setSegments(segments: Segment[]) {
     const t = this.currentTime;
     const wasPlaying = this.playing;
+    const ranged = Number.isFinite(this.until);
     this.stopNodes();
     this.segments = segments;
     this.pausedAt = Math.min(t, outputDuration(segments));
-    if (wasPlaying) this.play(this.pausedAt);
+    if (wasPlaying && !ranged) void this.play(this.pausedAt);
+    else if (wasPlaying) this.onEnded?.();
   }
 
   get duration() {

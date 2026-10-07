@@ -6,7 +6,7 @@
 // speech): play it, cut it (speech only) or make it a part. Parts show as coloured regions whose edges
 // can be dragged.
 import { useEffect, useLayoutEffect, useMemo, useRef } from 'react';
-import { outputDuration, outputToSource } from '../engine/edl';
+import { outputDuration, outputToSourceAt } from '../engine/edl';
 import { labelRows, setPartEdge } from '../engine/parts';
 import { isSpeech, type Part } from '../engine/types';
 import { editedPieces, movedPassages, tickStep, toOutputSpans, type Piece, type ZoomView } from '../engine/view';
@@ -338,7 +338,7 @@ function PartRegion({ part, left, width, row, view }: { part: Part & { outStart:
     let latest = before;
     const onMove = (ev: PointerEvent) => {
       const out = timeAt(body, ev.clientX, view, total);
-      const src = outputToSource(recording.segments, out)?.source ?? out;
+      const src = outputToSourceAt(recording.segments, out);
       latest = setPartEdge(before, part.id, edge, src, recording.duration);
       st.previewParts(latest);
     };
