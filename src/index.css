@@ -504,3 +504,19 @@ kbd { font: 12px ui-monospace, monospace; border: 1px solid var(--line); border-
 .clip-nowords { margin: 0 0 12px 104px; font-size: 13px; }
 .parts h3 .send-all { margin-left: 10px; vertical-align: 2px; }
 .send-all { padding: 3px 10px; font-size: 12px; white-space: nowrap; flex: none; }
+
+/* first-run tour (mockups/tour-a-coach.html): spotlight on one control, bubble beside it */
+.tour-spot { position: fixed; z-index: 50; border-radius: 10px; box-shadow: 0 0 0 9999px rgba(20, 18, 16, 0.55); outline: 2px solid #fff; pointer-events: none; transition: left .2s, top .2s, width .2s, height .2s; }
+.tour-dim { position: fixed; inset: 0; z-index: 50; background: rgba(20, 18, 16, 0.55); }
+.tour-tip { position: fixed; z-index: 51; width: min(340px, calc(100vw - 32px)); background: var(--panel); color: var(--fg); border-radius: 12px; box-shadow: 0 12px 36px rgba(0, 0, 0, 0.3); padding: 14px 16px; font-size: 13px; line-height: 1.5; }
+.tour-tip h5 { margin: 0 0 6px; font-size: 15px; }
+.tour-tip p { margin: 0; }
+.tour-bar { display: flex; align-items: center; gap: 6px; margin-top: 12px; }
+.tour-bar button { padding: 4px 10px; font-size: 12px; }
+.tour-count { margin-right: auto; color: var(--muted); font-size: 12px; }
+.tour-arrow { position: absolute; width: 12px; height: 12px; margin: -6px; background: var(--panel); transform: rotate(45deg); }
+.tour-arrow.below { top: 0; }
+.tour-arrow.above { top: 100%; }
+.tour-arrow.right { left: 0; }
+.tour-arrow.left { left: 100%; }
+.help-tour { margin-top: 10px; }

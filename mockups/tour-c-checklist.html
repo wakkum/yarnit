@@ -1,0 +1,84 @@
+<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>Tutorial C: Getting-started checklist</title><style>
+:root{--bg:#fbfaf8;--panel:#fff;--fg:#1c1b1a;--muted:#76716b;--line:#e6e2dc;--accent:#2f6fde;--sel:#cfe0ff;--int:#2f6fde;--vo:#2e8b57;--mus:#8a4fd1;--sfx:#c2620f;--dim:rgba(20,18,16,.55);font-family:Inter,system-ui,-apple-system,sans-serif;color-scheme:light}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){--bg:#151514;--panel:#1d1d1b;--fg:#ecebe8;--muted:#9a958e;--line:#34332f;--accent:#6b9bff;--sel:#3d6ee0;--int:#6b9bff;--vo:#5fcf8f;--mus:#b893f5;--sfx:#f0974a;--dim:rgba(0,0,0,.62);color-scheme:dark}}
+:root[data-theme="dark"]{--bg:#151514;--panel:#1d1d1b;--fg:#ecebe8;--muted:#9a958e;--line:#34332f;--accent:#6b9bff;--sel:#3d6ee0;--int:#6b9bff;--vo:#5fcf8f;--mus:#b893f5;--sfx:#f0974a;--dim:rgba(0,0,0,.62);color-scheme:dark}
+*{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--fg);font-size:14px}
+.note{max-width:1100px;margin:16px auto;padding:12px 16px;border:1px dashed var(--line);border-radius:10px;color:var(--muted);line-height:1.55}
+.note b{color:var(--fg)}.note ol{margin:6px 0 0;padding-left:20px}
+.frame{position:relative;max-width:1100px;margin:0 auto 28px;border:1px solid var(--line);border-radius:12px;overflow:hidden;background:var(--panel);height:560px}
+.cap{max-width:1100px;margin:0 auto 6px;font-size:12px;color:var(--muted);font-weight:600;text-transform:uppercase;letter-spacing:.06em}
+.shell{display:grid;grid-template-columns:230px 1fr;height:100%}
+.side{border-right:1px solid var(--line);padding:12px}
+.side h4{margin:4px 4px 12px;font-size:15px}
+.item{display:flex;align-items:center;gap:8px;padding:6px 8px;border-radius:8px;font-size:13px}
+.item .len{margin-left:auto;color:var(--muted);font-size:12px;font-family:ui-monospace,monospace}
+.item.on{background:var(--sel)}
+.lbl{font-size:11px;letter-spacing:.06em;color:var(--muted);margin:14px 8px 6px;text-transform:uppercase}
+.ico{width:20px;height:20px;border-radius:5px;display:inline-grid;place-items:center;font-size:10px;font-weight:700;color:#fff}
+.add{margin-top:12px;border:1.5px dashed var(--line);border-radius:10px;padding:12px;text-align:center;font-size:13px}
+.add small{display:block;color:var(--muted)}
+.app{display:flex;flex-direction:column;min-width:0}
+.top{display:flex;align-items:center;gap:8px;padding:10px 16px;border-bottom:1px solid var(--line)}
+.top .name{font-weight:600;margin-right:auto}
+button{font:inherit;font-size:13px;padding:5px 11px;border-radius:7px;border:1px solid var(--line);background:var(--panel);color:var(--fg)}
+button.primary{background:var(--accent);border-color:var(--accent);color:#fff}
+button.ghost{border-color:transparent;background:transparent}
+.tl{padding:12px 16px;border-bottom:1px solid var(--line)}
+.wave{height:70px;border:1px solid var(--line);border-radius:8px;background:repeating-linear-gradient(90deg,var(--int) 0 2px,transparent 2px 4px);mask:linear-gradient(transparent 20%,#000 20% 80%,transparent 80%);opacity:.7}
+.doc{padding:16px 24px;line-height:1.9;font-size:16px;max-width:720px}
+.who{font-size:12px;color:var(--int);font-weight:600}
+.cut{text-decoration:line-through;color:var(--muted)}
+.selw{background:var(--sel);border-radius:3px}
+.dim{position:absolute;inset:0;background:var(--dim)}
+.spot{position:absolute;border-radius:10px;box-shadow:0 0 0 9999px var(--dim);outline:2px solid #fff}
+.tip{position:absolute;width:320px;background:var(--panel);border-radius:12px;box-shadow:0 12px 36px rgba(0,0,0,.3);padding:14px 16px;font-size:13px;line-height:1.5;z-index:2}
+.tip h5{margin:0 0 6px;font-size:15px}
+.tip .bar{display:flex;align-items:center;gap:8px;margin-top:12px}
+.tip .bar .count{color:var(--muted);font-size:12px;margin-right:auto}
+.dots{display:flex;gap:4px;margin-right:auto}.dots i{width:7px;height:7px;border-radius:50%;background:var(--line)}.dots i.on{background:var(--accent)}
+.arrow{position:absolute;width:14px;height:14px;background:var(--panel);transform:rotate(45deg)}
+kbd{font-family:ui-monospace,monospace;font-size:11px;border:1px solid var(--line);border-bottom-width:2px;border-radius:4px;padding:0 4px}
+.modal{position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);width:620px;background:var(--panel);border-radius:16px;box-shadow:0 20px 60px rgba(0,0,0,.35);overflow:hidden}
+.ill{height:230px;background:var(--bg);border-bottom:1px solid var(--line);display:grid;place-items:center;position:relative}
+.mini{width:470px;height:180px;border:1px solid var(--line);border-radius:10px;background:var(--panel);padding:10px;font-size:12px}
+.mini .w{display:inline-block;padding:0 2px;margin:1px}
+.mbody{padding:18px 24px}
+.mbody h3{margin:0 0 6px;font-size:19px}
+.mbody p{margin:0;color:var(--muted);line-height:1.55}
+.mfoot{display:flex;align-items:center;gap:8px;padding:0 24px 18px}
+.lane{display:grid;grid-template-columns:80px 1fr;gap:6px;margin-bottom:5px}
+.lh{font-size:11px;font-weight:600;padding:5px;border:1px solid var(--line);border-left:3px solid var(--c);border-radius:6px}
+.lb{position:relative;height:26px;border:1px solid var(--line);border-radius:6px;background:var(--bg)}
+.clip{position:absolute;top:2px;bottom:2px;border-radius:5px;border:1.5px solid var(--c);background:color-mix(in srgb,var(--c) 16%,var(--panel));font-size:10px;font-weight:600;padding:1px 4px;white-space:nowrap;overflow:hidden}
+.check{position:absolute;right:16px;bottom:16px;width:300px;background:var(--panel);border:1px solid var(--line);border-radius:14px;box-shadow:0 12px 36px rgba(0,0,0,.18);padding:12px 14px;font-size:13px}
+.check h5{margin:0 0 2px;font-size:14px;display:flex;align-items:center}
+.check h5 span{margin-left:auto;color:var(--muted);font-weight:400;font-size:12px}
+.prog{height:5px;border-radius:3px;background:var(--line);margin:8px 0 10px;overflow:hidden}.prog i{display:block;height:100%;width:43%;background:var(--accent)}
+.task{display:flex;gap:9px;align-items:flex-start;padding:6px 4px;border-radius:8px}
+.task .b{width:18px;height:18px;border-radius:50%;border:1.5px solid var(--line);flex:none;display:grid;place-items:center;font-size:11px;color:#fff}
+.task.done .b{background:#2e8b57;border-color:#2e8b57}.task.done .t{color:var(--muted);text-decoration:line-through}
+.task.now{background:var(--sel)}
+.task .t small{display:block;color:var(--muted);text-decoration:none}
+.task .show{margin-left:auto;font-size:12px;color:var(--accent);white-space:nowrap}
+.pulse{position:absolute;border:2px solid var(--accent);border-radius:10px;box-shadow:0 0 0 6px color-mix(in srgb,var(--accent) 25%,transparent)}
+.hand{position:absolute;background:var(--accent);color:#fff;font-size:12px;padding:5px 9px;border-radius:8px;white-space:nowrap}
+.welcome{position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);width:440px;background:var(--panel);border-radius:16px;box-shadow:0 20px 60px rgba(0,0,0,.35);padding:22px 24px;text-align:center;line-height:1.55}
+.welcome h3{margin:0 0 6px;font-size:20px}.welcome p{margin:0 0 14px;color:var(--muted)}
+.welcome .row{display:flex;gap:8px;justify-content:center}
+</style></head><body><div class="note"><b>C. A getting-started checklist</b> in the corner, ticking itself off as you actually do each thing on the demo project. <b>Show me</b> points at the control for that step. Learning by doing, at your own pace; Hide folds it to a small "3 of 7" chip, and it goes away for good when done or dismissed.<br><br><b>In every option:</b> it starts the first time someone opens Yarnit, with a small <b>demo project</b> (a short interview, a voice-over and a music file) so every step has something real to point at. <b>Skip</b> is always there, Esc skips too, and it never comes back on its own. <b>Help &gt; Take the tour</b> restarts it later. Deleting the demo project is one click.</div><div class="cap">Checklist while working (3 of 7 done)</div><div class="frame"><div class="shell"><aside class="side"><h4>Demo: Field Notes ▾</h4>
+<div class="item"><span class="ico" style="background:var(--accent)">▤</span>Main timeline<span class="len">0:00</span></div>
+<div class="lbl">Recordings</div>
+<div class="item on"><span class="ico" style="background:var(--int)">◉</span>Interview with Omar<span class="len">0:48</span></div>
+<div class="item"><span class="ico" style="background:var(--vo)">VO</span>Intro VO<span class="len">0:09</span></div>
+<div class="item"><span class="ico" style="background:var(--mus)">♪</span>Theme music<span class="len">2 parts</span></div>
+<div class="add">+ Add recordings<small>or drop audio files here</small></div></aside><div class="app"><div class="top"><span class="name">Interview with Omar</span><button class="ghost">Undo</button><button>Highlights</button><button>Send to main ▾</button><button class="primary">Export</button><button class="ghost">Help</button></div>
+<div class="tl"><div style="display:flex;gap:10px;align-items:center;margin-bottom:8px"><button class="primary" style="border-radius:50%;width:32px;height:32px;padding:0">▶</button><span style="font-family:ui-monospace,monospace;font-size:13px">0:00 / 0:48</span></div><div class="wave"></div></div>
+<div class="doc"><div class="who">Speaker 1 · 0:00</div><span class="cut">Um, so</span> today I have Omar with me, who spent <span class="selw">three months on the</span> coast, working in one harbor, and he came back with a question nobody wanted to answer.</div></div></div><div class="check"><h5>Getting started<span>3 of 7 · <u>Hide</u></span></h5><div class="prog"><i style="width:43%"></i></div><div class="task done"><span class="b">✓</span><span class="t">Play the interview<small>Press Space or ▶</small></span></div><div class="task done"><span class="b">✓</span><span class="t">Cut a few words<small>Select them, press Delete</small></span></div><div class="task done"><span class="b">✓</span><span class="t">Highlight a quote<small>Select, then press 1</small></span></div><div class="task now"><span class="b"></span><span class="t">Mark a part of the music<small>Drag across its waveform</small></span><span class=show>Show me</span></div><div class="task "><span class="b"></span><span class="t">Send pieces to main<small>Send to main, top bar</small></span></div><div class="task "><span class="b"></span><span class="t">Turn the music down<small>Main timeline: click the clip</small></span></div><div class="task "><span class="b"></span><span class="t">Export the mix<small>Export > MP3</small></span></div></div></div><div class="cap">After "Show me": a pointer on the real control</div><div class="frame"><div class="shell"><aside class="side"><h4>Demo: Field Notes ▾</h4>
+<div class="item"><span class="ico" style="background:var(--accent)">▤</span>Main timeline<span class="len">0:00</span></div>
+<div class="lbl">Recordings</div>
+<div class="item on"><span class="ico" style="background:var(--int)">◉</span>Interview with Omar<span class="len">0:48</span></div>
+<div class="item"><span class="ico" style="background:var(--vo)">VO</span>Intro VO<span class="len">0:09</span></div>
+<div class="item"><span class="ico" style="background:var(--mus)">♪</span>Theme music<span class="len">2 parts</span></div>
+<div class="add">+ Add recordings<small>or drop audio files here</small></div></aside><div class="app"><div class="top"><span class="name">Interview with Omar</span><button class="ghost">Undo</button><button>Highlights</button><button>Send to main ▾</button><button class="primary">Export</button><button class="ghost">Help</button></div>
+<div class="tl"><div style="display:flex;gap:10px;align-items:center;margin-bottom:8px"><button class="primary" style="border-radius:50%;width:32px;height:32px;padding:0">▶</button><span style="font-family:ui-monospace,monospace;font-size:13px">0:00 / 0:48</span></div><div class="wave"></div></div>
+<div class="doc"><div class="who">Speaker 1 · 0:00</div><span class="cut">Um, so</span> today I have Omar with me, who spent <span class="selw">three months on the</span> coast, working in one harbor, and he came back with a question nobody wanted to answer.</div></div></div><div class="pulse" style="left:250px;top:120px;width:830px;height:72px"></div><div class="hand" style="left:430px;top:200px">Drag across the music waveform to mark a part ↑</div><div class="check"><h5>Getting started<span>3 of 7 · <u>Hide</u></span></h5><div class="prog"><i style="width:43%"></i></div><div class="task done"><span class="b">✓</span><span class="t">Play the interview<small>Press Space or ▶</small></span></div><div class="task done"><span class="b">✓</span><span class="t">Cut a few words<small>Select them, press Delete</small></span></div><div class="task done"><span class="b">✓</span><span class="t">Highlight a quote<small>Select, then press 1</small></span></div><div class="task now"><span class="b"></span><span class="t">Mark a part of the music<small>Drag across its waveform</small></span><span class=show>Show me</span></div><div class="task "><span class="b"></span><span class="t">Send pieces to main<small>Send to main, top bar</small></span></div><div class="task "><span class="b"></span><span class="t">Turn the music down<small>Main timeline: click the clip</small></span></div><div class="task "><span class="b"></span><span class="t">Export the mix<small>Export > MP3</small></span></div></div></div></body></html>

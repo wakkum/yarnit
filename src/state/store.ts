@@ -1,6 +1,7 @@
 // App state (Zustand). Heavy audio objects live outside the store in `media`
 // so React never diffs or clones them.
 import { create } from 'zustand';
+import { FRESH_TOUR, readTour, type TourState } from '../engine/tour';
 import { channelsOf, decodeFile, probeDuration, toWhisperMono, WHISPER_SAMPLE_RATE } from '../audio/decode';
 import { Player } from '../audio/player';
 import {
@@ -63,6 +64,8 @@ export type Settings = {
   showOriginal: boolean;
   /** The project sidebar: full list, or folded to a rail of icons. */
   sidebar: 'open' | 'rail';
+  /** First-run tour: which sections were shown, or switched off. */
+  tour: TourState;
 };
 
 const DEFAULT_SETTINGS: Settings = {
@@ -74,13 +77,15 @@ const DEFAULT_SETTINGS: Settings = {
   pauseKeep: 0.4,
   showOriginal: false,
   sidebar: 'open',
+  tour: FRESH_TOUR,
 };
 const SETTINGS_KEY = 'yarnit.settings';
 
 // Settings are a per-browser convenience; storage can be missing or blocked, so never rely on it.
 function loadSettings(): Settings {
   try {
-    return { ...DEFAULT_SETTINGS, ...JSON.parse(localStorage.getItem(SETTINGS_KEY) ?? '{}') };
+    const saved = JSON.parse(localStorage.getItem(SETTINGS_KEY) ?? '{}');
+    return { ...DEFAULT_SETTINGS, ...saved, tour: readTour(saved.tour) };
   } catch {
     return DEFAULT_SETTINGS;
   }
@@ -118,6 +123,8 @@ export type State = MainSlice & {
   queued: string[];
   /** Files waiting for the "What is this recording?" answer. */
   pendingFiles: PendingFile[] | null;
+  /** False until the last project has been reopened (or there was none), so the start screen is not a flash. */
+  booted: boolean;
   phase: Phase;
   progress: number;
   message: string;
@@ -303,6 +310,7 @@ export const useStore = create<State>((set, get) => ({
   transcribing: null,
   queued: [],
   pendingFiles: null,
+  booted: false,
   phase: 'empty',
   progress: 0,
   message: '',
@@ -795,11 +803,15 @@ export const useStore = create<State>((set, get) => ({
     // once per page load (React's dev mode runs mount effects twice)
     if (resumed) return;
     resumed = true;
-    await get().refreshLibrary();
-    const last = get().library[0];
-    if (!last || get().project || get().phase !== 'empty') return;
-    await get().openProject(last.id);
-    if (get().project?.id === last.id) set({ notice: `Reopened ${last.name}, saved ${ago(last.savedAt, Date.now())}` });
+    try {
+      await get().refreshLibrary();
+      const last = get().library[0];
+      if (!last || get().project || get().phase !== 'empty') return;
+      await get().openProject(last.id);
+      if (get().project?.id === last.id) set({ notice: `Reopened ${last.name}, saved ${ago(last.savedAt, Date.now())}` });
+    } finally {
+      set({ booted: true });
+    }
   },
 
   setNotice: (notice) => set({ notice }),

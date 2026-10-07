@@ -14,6 +14,7 @@ import { TopBar } from './ui/TopBar';
 import { Transcript } from './ui/Transcript';
 import { MainTimeline } from './ui/MainTimeline';
 import { MainTranscript } from './ui/MainTranscript';
+import { Tour } from './ui/Tour';
 
 export default function App() {
   const hasRecording = useStore((s) => s.recording != null);
@@ -139,6 +140,7 @@ export default function App() {
       {panel === 'highlights' && <HighlightsPanel />}
       {panel === 'projects' && <ProjectsPanel />}
       <Notice />
+      <Tour />
     </div>
       <AddDialog key={pendingKey} />
     </div>

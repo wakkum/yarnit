@@ -1,5 +1,6 @@
 // Help drawer (mockups/help-b-drawer.html, picked 5 Oct 2026). Keep the shortcut list in sync with App.tsx.
 import type { ReactNode } from 'react';
+import { FRESH_TOUR } from '../engine/tour';
 import { useStore } from '../state/store';
 
 import { combo, isMac } from './keys';
@@ -50,6 +51,7 @@ const FAQ: [string, string][] = [
   ['What are parts?', 'Pieces of a recording you want to use, each with a name and colour, for example Intro, Bed or Sting from a music file, or the best quote from an interview. Drag across the waveform, then click Add as part (or press Enter). Drag a part\'s edges on the waveform to adjust it, and click its name to rename it. Music and sound effects show their parts as pads instead of a transcript and are never cut; in an interview, parts sit in a strip under the waveform and are marked in the transcript with a coloured bar and a name tag. Parts may overlap, and each one can go to the main timeline on its own (Send to main on the pad or in its ⋯ menu), as often as you like. With two or more parts, Send all to main sends every part at once; music and effects then line up one after another.'],
   ['How does the main timeline work?', 'It is where you combine recordings into the final version. Send to main copies a piece of a recording into it as a clip, so later edits to the recording do not change the clip (send it again if you want the new version). Every kind has its own lane. Interview and voice-over clips play one after another in running order: use the arrows to change the order and Pause before to add a gap. Music and sound effects start where you drag them and play under the voice, so they do not move when you cut speech before them. Click a clip to set its volume (for example 30% for a music bed), and a fade in and fade out. The main timeline has its own Undo.'],
   ['Can I switch between light and dark?', 'Yes, with Auto / Light / Dark at the top right. Auto follows your computer. Your choice is remembered in this browser.'],
+  ['Can I see the tour again?', 'Yes: Take the tour again, under Getting started in this help. It shows each part of the app the next time it is on screen: the start screen, a transcribed recording, a music file and the main timeline.'],
   ['Which browser should I use?', 'Chrome or Edge. Other browsers may work but are untested.'],
 ];
 
@@ -73,6 +75,15 @@ export function Help() {
             </li>
           ))}
         </ol>
+        <button
+          className="help-tour"
+          onClick={() => {
+            useStore.getState().setSettings({ tour: FRESH_TOUR });
+            setPanel(null);
+          }}
+        >
+          Take the tour again
+        </button>
       </section>
       <section>
         <h3>Shortcuts</h3>

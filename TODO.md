@@ -3,6 +3,8 @@
 ## Now
 - [x] Pick an editor layout (C, timeline, 4 Oct 2026) and build it
 - [x] Help drawer: getting started, shortcuts, FAQ (B, 5 Oct 2026)
+- [x] First-run tour (A, without a demo project): sections for the start screen, a speech recording, music, the main timeline; skippable, restart from Help (7 Oct 2026)
+- [ ] "Unable to decode audio data" on a 150 MB file (live site): find the format and length, then decode long files in pieces or unsupported formats with Mediabunny; show a clear message instead of the browser's
 - [x] Light/Dark/Auto theme, clearer highlights, floating Cut/Paste bar (5 Oct 2026)
 - [ ] Test cut quality on real recordings (clean 5 min, full 60 min, noisy/crosstalk). This is the POC verdict.
 - [ ] Delete `mockups/` once the UI has settled (throwaway)
@@ -62,4 +64,4 @@
 
 ## Known issues
 - [ ] Whisper often omits fillers on real speech (see ARCHITECTURE.md "Known limits")
-- [ ] Long files: render/encode in chunks to cap memory
+- [ ] Long files: decode, render and encode in chunks to cap memory (a 2 to 3 hour MP3 does not decode at all today)
