@@ -131,6 +131,8 @@ select { background: var(--panel); border: 1px solid var(--line); border-radius:
 .para { display: grid; grid-template-columns: 88px 1fr; gap: 16px; margin-bottom: 20px; }
 /* a long transcript: the browser skips laying out paragraphs that are off screen */
 .para { content-visibility: auto; contain-intrinsic-size: auto 160px; }
+/* that skipping also clips: a paragraph with an open menu draws normally, above the paragraphs after it */
+.para:has(.pop) { content-visibility: visible; position: relative; z-index: 20; }
 .para-label { display: flex; flex-direction: column; align-items: flex-start; font-weight: 600; font-size: 13px; padding-top: 4px; user-select: none; }
 .para-label .ts { color: var(--muted); font-weight: 400; font-size: 12px; }
 .para p { margin: 0; font-size: 17px; line-height: 1.75; max-width: 70ch; user-select: none; }
