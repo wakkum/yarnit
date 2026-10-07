@@ -2,9 +2,15 @@
 
 Edit audio by editing its transcript, entirely in your browser. Nothing is uploaded: transcription (Whisper), editing, playback and export all run on your own computer.
 
-## Run it
+## Use it online
 
-You need two things, both free:
+Open **[wakkum.github.io/yarnit](https://wakkum.github.io/yarnit/)** in Chrome or Edge. Nothing to install. Even online, your audio never leaves your computer: the page runs everything in your browser, and your projects are saved there too.
+
+The first time you transcribe, the speech model (about 80 MB) downloads once and is kept by your browser.
+
+## Run it offline
+
+Want it on your own computer, without the internet? You need two things, both free:
 
 - **Node.js 22 or newer**: download the LTS version from [nodejs.org](https://nodejs.org/en/download) and install it with the default options.
 - **Chrome or Edge.** Other browsers may work but are untested.
@@ -18,7 +24,7 @@ Then:
 3. The first run installs what Yarnit needs, which takes a few minutes. After that it starts in seconds.
 4. Yarnit opens in your browser at http://localhost:4173. Keep the launcher window open while you use it; close it to stop Yarnit.
 
-The first time you transcribe, the speech model (about 80 MB) downloads once and is kept by your browser. After that, Yarnit works offline.
+After the speech model has downloaded once, this copy works without the internet. Projects saved here are separate from the ones saved on the website.
 
 **If your computer blocks the launcher:**
 
@@ -40,7 +46,7 @@ Drop in audio files (MP3, WAV, M4A), say what each one is, and wait for the tran
 | Undo / redo | Ctrl+Z / Ctrl+Y | ⌘Z / ⇧⌘Z |
 | Search | Ctrl+F | ⌘F |
 
-A project holds several recordings (interviews, voice-overs, music, sound effects), listed in a sidebar. For music and sound effects you mark the parts you want (intro, bed, sting) by dragging across the waveform. Your work is saved automatically in the browser, and Yarnit reopens your last project next time (**Projects** lists the rest). Also: shorten long pauses, remove "um"s, highlight in colours, rename speakers, light or dark theme, and export to MP3 or WAV.
+A project holds several recordings (interviews, voice-overs, music, sound effects), listed in a sidebar. For music and sound effects you mark the parts you want (intro, bed, sting) by dragging across the waveform. **Send to main** copies pieces to the main timeline, where voice and music play together, each with its own volume and fades, and Export mixes it into one file. Your work is saved automatically in the browser, and Yarnit reopens your last project next time (**Projects** lists the rest). Also: shorten long pauses, remove "um"s, highlight in colours, rename speakers, light or dark theme, and export to MP3 or WAV.
 
 ## For developers
 
@@ -55,7 +61,7 @@ A project holds several recordings (interviews, voice-overs, music, sound effect
 
 ### Hosting on GitHub Pages
 
-`.github/workflows/pages.yml` builds, checks and publishes the app on every push to `main`. It is skipped while the repository is private. Once it is public, turn it on in **Settings > Pages > Build and deployment > Source: GitHub Actions**; the app then runs at `https://<owner>.github.io/yarnit/`. Asset paths are relative (`base: './'` in `vite.config.ts`), so the same build works at any path.
+`.github/workflows/pages.yml` checks, builds and publishes the app on every push to `main`; the live copy is https://wakkum.github.io/yarnit/. For a fork: make the repository public, then **Settings > Pages > Build and deployment > Source: GitHub Actions**, and it runs at `https://<owner>.github.io/yarnit/`. Asset paths are relative (`base: './'` in `vite.config.ts`), so the same build works at any path.
 
 Privacy note: saved recordings live in the browser's storage for the site's address. On `<owner>.github.io` that address is shared by every Pages site of that account, so any of them could read what users saved in Yarnit. For a workshop with real interviews, give Yarnit its own address (a custom domain, or an account or organisation that publishes nothing else on Pages).
 

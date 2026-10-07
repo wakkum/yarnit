@@ -1,6 +1,6 @@
 # Build and publish Yarnit to GitHub Pages on every push to main.
-# Skipped while the repository is private (Pages on a private repo needs a paid plan). Once it is
-# public: Settings > Pages > Build and deployment > Source: GitHub Actions.
+# Skipped while the repository is private (Pages on a private repo needs a paid plan). Turned on
+# 7 Oct 2026 (Settings > Pages > Source: GitHub Actions); live at https://wakkum.github.io/yarnit/
 name: Deploy to GitHub Pages
 
 on:
@@ -22,15 +22,15 @@ jobs:
     if: ${{ !github.event.repository.private }}
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
         with:
           node-version: 22
           cache: npm
       - run: npm ci
       - run: npm run check
       - run: npm run build
-      - uses: actions/upload-pages-artifact@v3
+      - uses: actions/upload-pages-artifact@v5
         with:
           path: dist
 
@@ -42,4 +42,4 @@ jobs:
       url: ${{ steps.deployment.outputs.page_url }}
     steps:
       - id: deployment
-        uses: actions/deploy-pages@v4
+        uses: actions/deploy-pages@v5

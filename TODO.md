@@ -12,7 +12,8 @@
 - [x] Ready for GitHub Pages: relative asset paths, deploy workflow (skipped while private), build tested from a `/yarnit/` subfolder incl. transcription and MP3 export (6 Oct 2026)
 - [x] Commit the review fixes, Pages workflow and main timeline (7 Oct 2026)
 - [x] `.claude/` preview config kept local, in .gitignore (7 Oct 2026)
-- [ ] Make the repo public, then Settings > Pages > Source: GitHub Actions. Decide on a dedicated address (custom domain) so saved recordings are not shared with other `github.io` sites of the account
+- [x] Repo public, GitHub Pages live at https://wakkum.github.io/yarnit/ (7 Oct 2026), checked: load, transcribe, send to main, MP3 export
+- [ ] Still open from hosting: decide on a dedicated address (custom domain) so saved recordings are not shared with other `github.io` sites of the account
 
 ## Milestone 2: Reorder and search
 - [x] Keyboard cut/paste move (Cmd+X, click target, Cmd+V)
