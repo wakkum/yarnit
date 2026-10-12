@@ -3,7 +3,14 @@ import { displayWords, findPauses } from '../engine/edl';
 import { passages, wordColors } from '../engine/highlights';
 import { isSpeech } from '../engine/types';
 import { searchHits } from '../engine/view';
-import { useStore, type Settings } from '../state/store';
+import { useStore, type Settings, type TranscriptFormat } from '../state/store';
+
+const TRANSCRIPT_FORMATS: [TranscriptFormat, string, string][] = [
+  ['docx', 'Word document', '.docx, speaker names and timecodes'],
+  ['txt', 'Text', '.txt, opens anywhere'],
+  ['srt', 'Subtitles', '.srt, for video editors and YouTube'],
+  ['vtt', 'Web subtitles', '.vtt, for web video players'],
+];
 import { combo, isMac } from './keys';
 import { SendMenu } from './SendMenu';
 import { clock } from './time';
@@ -118,12 +125,13 @@ export function TopBar() {
               className="primary"
               onClick={() => setMenu(!menu)}
               disabled={busy || (mainOpen && mainEmpty)}
-              title={mainOpen ? 'Mix every lane into one audio file, or export the transcript' : undefined}
+              title={mainOpen ? 'Mix every lane into one audio file, or export the transcript' : 'Export the edited audio or its transcript'}
             >
               Export
             </button>
             {menu && (
               <div className="menu-list" role="menu">
+                <div className="sec">Audio</div>
                 <button
                   role="menuitem"
                   onClick={() => {
@@ -142,16 +150,22 @@ export function TopBar() {
                 >
                   WAV <small>16-bit, full quality</small>
                 </button>
-                {mainOpen && (
-                  <button
-                    role="menuitem"
-                    onClick={() => {
-                      setMenu(false);
-                      useStore.getState().exportMainTranscript();
-                    }}
-                  >
-                    Transcript <small>Word document (.docx)</small>
-                  </button>
+                {(mainOpen || speech) && (
+                  <>
+                    <div className="sec">Transcript, every line timecoded</div>
+                    {TRANSCRIPT_FORMATS.map(([format, label, note]) => (
+                      <button
+                        key={format}
+                        role="menuitem"
+                        onClick={() => {
+                          setMenu(false);
+                          useStore.getState().exportTranscript(format);
+                        }}
+                      >
+                        {label} <small>{note}</small>
+                      </button>
+                    ))}
+                  </>
                 )}
               </div>
             )}

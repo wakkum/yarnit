@@ -6,12 +6,12 @@ import type { Part, Word } from './types';
 const word = (id: string, start: number, end: number): Word => ({ id, text: id, start, end, trackId: 't' });
 const dw = (w: Word, deleted = false): DisplayWord => ({ word: w, deleted });
 
-const p = (id: string, start: number, end: number, name = id): Part => ({ id, name, color: 'red', start, end });
+const p = (id: string, start: number, end: number, name = id): Part => ({ id, name, color: 'yellow', start, end });
 
 describe('parts', () => {
   it('add in either order, clamped, sorted, with the next name and an unused colour', () => {
     const r = addPart([p('a', 50, 60, 'Part 1')], 30, -5, 100, 'b')!;
-    expect(r.part).toEqual({ id: 'b', name: 'Part 2', color: 'orange', start: 0, end: 30 });
+    expect(r.part).toEqual({ id: 'b', name: 'Part 2', color: 'green', start: 0, end: 30 });
     expect(r.parts.map((x) => x.id)).toEqual(['b', 'a']);
     expect(addPart([], 98, 140, 100, 'c')!.part.end).toBe(100);
   });

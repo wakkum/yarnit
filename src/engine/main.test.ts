@@ -227,6 +227,15 @@ describe('cutting a clip', () => {
     expect(cutPoint(c, 2)).toEqual({ t: 2, after: 'a' }); // already in a gap
     expect(cutPoint(clip('m', 'music', 10), 2.6)).toEqual({ t: 2.6, after: null });
   });
+
+  it('never moves a voice cut onto the edge of a clip that starts or ends on a word', () => {
+    const words = ['one', 'two', 'three'].map((text, i) => ({ id: `w${i}`, text, start: i, end: i + 0.9, trackId: 't1' }));
+    const c = clip('v', 'voiceover', 2.9, { words });
+    // in "one", whose start is the clip's start: the gap after it, not the edge
+    expect(cutPoint(c, 0.2).t).toBeCloseTo(0.95);
+    // in "three", which ends the clip: the gap before it
+    expect(cutPoint(c, 2.8).t).toBeCloseTo(1.95);
+  });
 });
 
 describe('snapping', () => {

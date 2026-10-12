@@ -338,7 +338,9 @@ export function cutPoint(c: Pick<MainClip, 'kind' | 'segments' | 'words'>, t: nu
   }
   const inGap = gaps.find((_, i) => (i === 0 ? 0 : kept[i - 1].end) <= t && t <= (i === kept.length ? length : kept[i].start));
   if (inGap) return { t, after: inGap.after };
-  return gaps.reduce((best, g) => (Math.abs(g.t - t) < Math.abs(best.t - t) ? g : best));
+  // never move the cut onto the clip's edge (a clip starting or ending on a word): splitClip would refuse it
+  const inside = gaps.filter((g) => g.t >= MIN_CLIP && g.t <= length - MIN_CLIP);
+  return (inside.length ? inside : gaps).reduce((best, g) => (Math.abs(g.t - t) < Math.abs(best.t - t) ? g : best));
 }
 
 /**

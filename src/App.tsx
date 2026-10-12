@@ -48,8 +48,8 @@ export default function App() {
         st.setPanel(st.panel === 'help' ? null : 'help');
       } else if (e.key === 'Escape' && st.panel && !st.selection.length && !st.clipboard.length && !st.waveSel) {
         st.setPanel(null);
-      } else if (!mod && !e.altKey && /^[0-6]$/.test(e.key) && st.selection.length && !st.mainOpen) {
-        // 1 to 6 colour the selection, 0 clears its highlight
+      } else if (!mod && !e.altKey && /^[0-4]$/.test(e.key) && st.selection.length && !st.mainOpen) {
+        // 1 to 4 colour the selection, 0 clears its highlight
         e.preventDefault();
         st.highlightSelection(e.key === '0' ? null : HIGHLIGHT_COLORS[+e.key - 1]);
       } else if ((e.key === 'ArrowUp' || e.key === 'ArrowDown') && st.recording && !mod) {
@@ -90,11 +90,21 @@ export default function App() {
       } else if (e.code === 'Space') {
         e.preventDefault();
         st.togglePlay();
+      } else if ((e.key === 'ArrowLeft' || e.key === 'ArrowRight') && !mod && (st.recording || st.mainOpen)) {
+        // nudge the playhead: a tenth of a second, a second with Shift, a word with Alt
+        e.preventDefault();
+        st.stepPlayhead(e.key === 'ArrowLeft' ? -1 : 1, e.altKey ? 'word' : e.shiftKey ? 1 : 0.1);
+      } else if (mod && e.key.toLowerCase() === 'a' && (st.mainOpen || (st.recording && isSpeech(st.recording.kind)))) {
+        e.preventDefault();
+        st.selectAll();
       } else if (e.key === 'Backspace' || e.key === 'Delete') {
         e.preventDefault();
-        // music and sound effects are never cut, only marked
-        if (st.mainOpen) st.deleteMainSelection();
-        else if (st.waveSel && st.recording && isSpeech(st.recording.kind)) st.deleteWaveSel();
+        // main timeline: selected words are cut, or with none the selected clip is removed.
+        // Music and sound effects are never cut, only marked.
+        if (st.mainOpen) {
+          if (st.selection.length) st.deleteMainSelection();
+          else if (st.mainClip) st.removeClip(st.mainClip);
+        } else if (st.waveSel && st.recording && isSpeech(st.recording.kind)) st.deleteWaveSel();
         else st.deleteSelection();
       } else if (mod && e.key.toLowerCase() === 'z') {
         e.preventDefault();
@@ -123,6 +133,21 @@ export default function App() {
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
+  }, []);
+
+  // Ctrl/Cmd+C copies the selected words (transcripts turn off the browser's own text selection)
+  useEffect(() => {
+    const onCopy = (e: ClipboardEvent) => {
+      const tag = (e.target as HTMLElement).tagName;
+      if (tag === 'INPUT' || tag === 'TEXTAREA') return;
+      const text = useStore.getState().selectionText();
+      if (!text) return;
+      e.preventDefault();
+      e.clipboardData?.setData('text/plain', text);
+      useStore.getState().setNotice('Copied the selected words');
+    };
+    document.addEventListener('copy', onCopy);
+    return () => document.removeEventListener('copy', onCopy);
   }, []);
 
   return (

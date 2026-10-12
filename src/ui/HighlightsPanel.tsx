@@ -13,7 +13,7 @@ export function HighlightsPanel() {
   const recording = useStore((s) => s.recording);
   const transcribed = useStore((s) => s.transcribed);
   const { setPanel, sendToMain } = useStore.getState();
-  const [pick, setPick] = useState<Set<HighlightColor>>(new Set(['red']));
+  const [pick, setPick] = useState<Set<HighlightColor>>(new Set(['yellow']));
 
   const list = useMemo(() => {
     if (!recording) return [];
@@ -34,7 +34,7 @@ export function HighlightsPanel() {
       {!recording || !byColor.length ? (
         <p className="muted" style={{ lineHeight: 1.55 }}>
           No highlights yet. Select words in the transcript and pick a colour in the bar that appears, or press{' '}
-          <kbd>1</kbd> to <kbd>6</kbd>. <kbd>0</kbd> removes a highlight.
+          <kbd>1</kbd> to <kbd>4</kbd>. <kbd>0</kbd> removes a highlight.
         </p>
       ) : (
         byColor.map(([color, ps]) => (
@@ -88,7 +88,7 @@ export function HighlightsPanel() {
   );
 }
 
-/** Optional meaning for a colour (red = "Must keep"); saved on blur or Enter. */
+/** Optional meaning for a colour (yellow = "Must keep"); saved on blur or Enter. */
 function NameInput({ color, value }: { color: HighlightColor; value: string }) {
   const [text, setText] = useState(value);
   const save = () => text !== value && useStore.getState().nameHighlight(color, text);

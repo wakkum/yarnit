@@ -2,7 +2,7 @@
 // one recording never rewrites the others. Audio files are stored apart (src/state/library.ts),
 // keyed by track id. Version 1 (before 6 Oct 2026) saved one recording per "project".
 import { clipLength, fromStretches, MAX_GAIN } from './main';
-import { HIGHLIGHT_COLORS, LANE_SIZES, RECORDING_KINDS, type MainClip, type MainTimeline, type Project, type Recording, type RecordingKind } from './types';
+import { HIGHLIGHT_COLORS, LANE_SIZES, RECORDING_KINDS, type HighlightColor, type MainClip, type MainTimeline, type Project, type Recording, type RecordingKind } from './types';
 
 export const SAVE_VERSION = 2;
 
@@ -179,10 +179,25 @@ export function migrateV1(data: unknown): { project: SavedProject; recording: Sa
   return { project, recording };
 }
 
+/** The six colours before 12 Oct 2026, mapped onto the four that replaced them. */
+const OLD_COLORS: Record<string, HighlightColor> = { red: 'magenta', orange: 'yellow', purple: 'magenta', pink: 'magenta' };
+
+/** A saved highlight or part colour as one of today's, or null if it is neither. */
+export function readColor(c: unknown): HighlightColor | null {
+  if (typeof c !== 'string') return null;
+  return (HIGHLIGHT_COLORS as readonly string[]).includes(c) ? (c as HighlightColor) : (OLD_COLORS[c] ?? null);
+}
+
 function readRecording(data: unknown): Recording | null {
   const p = data as Partial<Recording> | undefined;
   if (!p || typeof p.id !== 'string' || !Array.isArray(p.tracks) || !p.tracks.length || !Array.isArray(p.segments)) return null;
-  const colors = new Set<string>(HIGHLIGHT_COLORS);
+  // colours as they are now, or the old six mapped onto the four
+  const color = (c: unknown): HighlightColor | null => readColor(c);
+  const names: Partial<Record<HighlightColor, string>> = {};
+  for (const [k, v] of Object.entries(p.highlightNames ?? {})) {
+    const c = color(k);
+    if (c && typeof v === 'string' && v && !names[c]) names[c] = v;
+  }
   return {
     id: p.id,
     name: p.name ?? 'Untitled',
@@ -193,10 +208,11 @@ function readRecording(data: unknown): Recording | null {
     speakers: p.speakers ?? [],
     words: p.words ?? [],
     segments: p.segments,
-    highlights: (p.highlights ?? []).filter((h) => colors.has(h.color)),
-    highlightNames: p.highlightNames ?? {},
+    highlights: (p.highlights ?? []).flatMap((h) => (color(h.color) ? [{ ...h, color: color(h.color)! }] : [])),
+    highlightNames: names,
     parts: (p.parts ?? [])
-      .filter((x) => colors.has(x.color) && typeof x.start === 'number' && typeof x.end === 'number' && x.end > x.start)
+      .flatMap((x) => (color(x.color) ? [{ ...x, color: color(x.color)! }] : []))
+      .filter((x) => typeof x.start === 'number' && typeof x.end === 'number' && x.end > x.start)
       .sort((a, b) => a.start - b.start),
   };
 }

@@ -17,6 +17,20 @@
 - [x] Repo public, GitHub Pages live at https://wakkum.github.io/yarnit/ (7 Oct 2026), checked: load, transcribe, send to main, MP3 export
 - [ ] Still open from hosting: decide on a dedicated address (custom domain) so saved recordings are not shared with other `github.io` sites of the account
 
+## Reviewer feedback (12 Oct 2026)
+Quick fixes done (see ARCHITECTURE.md, 12 Oct). Planned, each with mockups first:
+- [ ] Send to main: list the passages a colour would send, with checkboxes; light them up on hover; "Sent 3 passages" notice with Undo
+- [x] Four highlight colours (yellow, green, blue, magenta) covering the full word height; search hits get another look; convert old colours (12 Oct)
+- [x] Transcript exports with every line timecoded: .docx, .txt, .srt, .vtt, for recordings and the main timeline (12 Oct)
+- [ ] "+ Row" in the Music and Sound effect lanes; new clips land in the first free row
+- [ ] Split a paragraph at a word (Enter) and give a selection to another speaker from the selection bar
+- [ ] Trim a main clip by dragging its edges, to pull back a word cut off (also listed under Projects)
+- [ ] Drag a clip between the Voice-over and Interview lanes (the menu option exists)
+- [ ] Drag across a stretch of a main clip and delete it (cleaning up a bad take)
+- [ ] "Correct" in the selection bar, and find and replace for a misheard name
+- [ ] Strike-through "mark only" mode, if the reviewer confirms that is what they meant
+- [ ] Later: transcribe a waveform selection again; mark gaps with sound but no words
+
 ## Milestone 2: Reorder and search
 - [x] Keyboard cut/paste move (Cmd+X, click target, Cmd+V)
 - [x] Move whole paragraphs: ↑ ↓, Alt+Shift+↑/↓, Outline view with drag (5 Oct 2026). If the user doesn't like C, switch to B (`mockups/para-b-blocks.html`)
@@ -32,7 +46,7 @@
 - [x] Autosave project + Projects drawer (IndexedDB for project JSON and audio, 5 Oct 2026)
 - [ ] Save/open a project file (export a project to move it to another browser or computer)
 - [ ] Keep undo history across reopen (maybe the last N steps)
-- [ ] SRT/VTT export with edited timestamps
+- [x] SRT/VTT export with edited timestamps (12 Oct 2026)
 
 ## Projects (6 Oct 2026)
 - [x] Projects with several recordings, collapsible sidebar, "What is this recording?" on add, background transcription queue, v1 saves migrated

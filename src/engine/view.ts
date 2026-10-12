@@ -188,3 +188,14 @@ export function zoomAround(view: ZoomView | null, total: number, factor: number,
 export function tickStep(span: number): number {
   return [0.5, 1, 2, 5, 10, 15, 30, 60, 120, 300, 600, 900, 1800, 3600].find((s) => span / s <= 8) ?? 3600;
 }
+
+/**
+ * Where Alt+arrow jumps: the start of the next word after `t` (dir 1) or the previous one before it
+ * (dir -1), from word start times in playback order. A start within `eps` of `t` counts as where the
+ * playhead already is. Null at either end.
+ */
+export function nextStop(starts: number[], t: number, dir: 1 | -1, eps = 0.02): number | null {
+  const sorted = [...starts].sort((a, b) => a - b);
+  if (dir > 0) return sorted.find((s) => s > t + eps) ?? null;
+  return sorted.findLast((s) => s < t - eps) ?? null;
+}

@@ -29,7 +29,8 @@ export type Word = {
  */
 export type Segment = { id: string; start: number; end: number };
 
-export const HIGHLIGHT_COLORS = ['red', 'orange', 'green', 'blue', 'purple', 'pink'] as const;
+/** Four colours (reviewer, 12 Oct 2026); saves from before held six and are converted by `readColor`. */
+export const HIGHLIGHT_COLORS = ['yellow', 'green', 'blue', 'magenta'] as const;
 export type HighlightColor = (typeof HIGHLIGHT_COLORS)[number];
 
 /**
@@ -60,12 +61,12 @@ export type Recording = {
   duration: number;
   tracks: Track[];
   speakers: Speaker[];
-  /** Written once by transcription; edits never touch words. */
+  /** Written by transcription; only `text` (corrections) and `speakerId` change afterwards. */
   words: Word[];
   /** The only thing audio edits change. */
   segments: Segment[];
   highlights: Highlight[];
-  /** Optional meaning per colour, e.g. red = "Must keep". */
+  /** Optional meaning per colour, e.g. yellow = "Must keep". */
   highlightNames: Partial<Record<HighlightColor, string>>;
   /** Music and sound effects only, sorted by start. */
   parts: Part[];

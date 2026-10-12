@@ -179,11 +179,14 @@ function ClipText({
               <span className="ts mono">{out == null ? 'cut' : fmt(c.start + out)}</span>
             </div>
             <p>
-              {p.words.map((d) => {
+              {p.words.map((d, i) => {
                 const cls = ['w'];
+                // as in a recording: neighbouring selected words read as one block, the space between them included
+                const sel = (k: number) => !!p.words[k] && !p.words[k].deleted && selected.has(p.words[k].word.id);
+                const joinNext = !d.deleted && sel(i) && sel(i + 1);
                 if (d.deleted) cls.push('del');
                 else {
-                  if (selected.has(d.word.id)) cls.push('sel', 'sel-first', 'sel-last');
+                  if (sel(i)) cls.push('sel', ...(sel(i - 1) ? [] : ['sel-first']), ...(joinNext ? [] : ['sel-last']));
                   if (current === d.word.id) cls.push('cur');
                 }
                 if (editing === d.word.id)
@@ -212,7 +215,8 @@ function ClipText({
                       onMouseEnter={() => !d.deleted && onEnter(d.word.id)}
                     >
                       {d.word.text}
-                    </span>{' '}
+                    </span>
+                    {joinNext ? <span className="gap sel"> </span> : ' '}
                   </span>
                 );
               })}

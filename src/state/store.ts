@@ -19,8 +19,12 @@ import {
   PARAGRAPH_PAD,
   shortenPauses as shortenInEdit,
   sourceToOutput,
+  wordOutputTimes,
   type Pause,
 } from '../engine/edl';
+import { docxFile } from '../engine/docx';
+import { clock, copyText, recordingBlocks, transcriptBlocks, transcriptSrt, transcriptTxt, transcriptVtt, type DocBlock } from '../engine/transcript';
+import { mainDuration, wordTimes } from '../engine/main';
 import { renderEdit, silenceThreshold, snapToQuiet, speechEnd } from '../engine/render';
 import { highlightWords } from '../engine/highlights';
 import { addPart, removePart, renamePart, spanFromSlices } from '../engine/parts';
@@ -35,13 +39,14 @@ import {
   type SavedRecording,
 } from '../engine/save';
 import { isSpeech, type HighlightColor, type Part, type Project, type Recording, type RecordingKind, type Segment, type Speaker, type Word } from '../engine/types';
-import { clampView, computePeaks, editedPieces, toOutputSpans, paragraphMove, paragraphs, searchHits, zoomAround, type Paragraph, type ZoomView } from '../engine/view';
+import { clampView, computePeaks, editedPieces, nextStop, toOutputSpans, paragraphMove, paragraphs, searchHits, zoomAround, type Paragraph, type ZoomView } from '../engine/view';
 import type { ExportMessage, ExportRequest } from '../workers/export.worker';
 import type { TranscribeMessage, TranscribeRequest } from '../workers/transcribe.worker';
 import { ago } from '../ui/time';
 import * as library from './library';
 import { media } from './media';
-import { createMainSlice, mainLength, type MainSlice } from './mainSlice';
+import { createMainSlice, mainLength, mainOf, placedOf, type MainSlice } from './mainSlice';
+import { KIND_LABEL } from '../ui/kinds';
 
 /** 'off': this recording is not being saved (storage blocked or full); see `message`. */
 export type SaveStatus = 'off' | 'saving' | 'saved' | 'error';
@@ -114,6 +119,9 @@ const PEAK_BUCKETS = 3000;
 
 export { media };
 
+/** Transcript export formats: a Word document, plain text, or subtitles (SRT, WebVTT). */
+export type TranscriptFormat = 'docx' | 'txt' | 'srt' | 'vtt';
+
 export type State = MainSlice & {
   /** The open project (null on the start screen). */
   project: Project | null;
@@ -182,6 +190,14 @@ export type State = MainSlice & {
   deleteRecording: (id: string) => Promise<void>;
   setSettings: (s: Partial<Settings>) => void;
   select: (ids: string[]) => void;
+  /** Select every kept word of the open transcript (a recording's, or the main timeline's). */
+  selectAll: () => void;
+  /** The selected words as text for the clipboard (speakers and times when it spans paragraphs). */
+  selectionText: () => string;
+  /** Move the playhead `step` seconds (negative: back), or with 'word' to the next or previous word start. */
+  stepPlayhead: (dir: 1 | -1, step: number | 'word') => void;
+  /** The transcript of the open recording, or of the main timeline's voice clips, timecoded line by line. */
+  exportTranscript: (format: TranscriptFormat) => void;
   applyEdit: (segments: Segment[]) => void;
   deleteSelection: () => void;
   moveWords: (ids: string[], targetId: string, side: 'before' | 'after') => void;
@@ -590,6 +606,70 @@ export const useStore = create<State>((set, get) => ({
   },
   select: (ids) => set(ids.length ? { selection: ids, waveSel: null } : { selection: ids }),
 
+  selectAll() {
+    const { recording, mainOpen } = get();
+    if (mainOpen) return get().select(wordTimes(placedOf(get())).map((w) => w.id));
+    if (!recording || !isSpeech(recording.kind)) return;
+    get().select(currentParagraphs(recording).flatMap((p) => p.words.filter((d) => !d.deleted).map((d) => d.word.id)));
+  },
+
+  selectionText() {
+    const { recording, mainOpen, selection } = get();
+    if (!selection.length) return '';
+    const blocks = mainOpen ? transcriptBlocks(mainOf(get()), (k) => KIND_LABEL[k]) : recording ? recordingBlocks(recording, currentParagraphs(recording)) : [];
+    return copyText(blocks, new Set(selection));
+  },
+
+  stepPlayhead(dir, step) {
+    const { recording, mainOpen } = get();
+    if (mainOpen) {
+      const placed = placedOf(get());
+      const now = get().mainTime();
+      const t = step === 'word' ? nextStop(wordTimes(placed).map((w) => w.at), now, dir) : now + dir * step;
+      if (t != null) get().seekMain(Math.max(0, Math.min(mainDuration(placed), t)));
+      return;
+    }
+    const player = media.player;
+    if (!recording || !player || !media.buffers.size) return;
+    const now = player.currentTime;
+    let t: number | null = now + dir * (step === 'word' ? 0 : step);
+    if (step === 'word') {
+      const display = displayWords(recording.words, recording.segments);
+      const mids = wordOutputTimes(display, recording.segments);
+      // a word's output start: its midpoint's output time, less half the word
+      const starts = display.filter((d) => mids.has(d.word.id)).map((d) => mids.get(d.word.id)! - (d.word.end - d.word.start) / 2);
+      t = nextStop(starts, now, dir);
+    }
+    if (t != null) get().seekOutput(Math.min(outputDuration(recording.segments), t));
+  },
+
+  exportTranscript(format) {
+    const { recording, mainOpen, project } = get();
+    let blocks: DocBlock[] = [];
+    let name = '';
+    let length = 0;
+    if (mainOpen) {
+      blocks = transcriptBlocks(mainOf(get()), (k) => KIND_LABEL[k]);
+      name = project?.name ?? 'Main timeline';
+      length = mainLength(get());
+    } else if (recording && isSpeech(recording.kind)) {
+      blocks = recordingBlocks(recording, currentParagraphs(recording));
+      name = recording.name;
+      length = outputDuration(recording.segments);
+    }
+    if (!blocks.length) return get().setNotice(mainOpen ? 'No voice clips with words on the main timeline yet.' : 'There is no transcript to export yet.');
+    const date = new Date().toLocaleDateString(undefined, { day: 'numeric', month: 'long', year: 'numeric' });
+    const subtitle = `${mainOpen ? 'Main timeline transcript' : 'Transcript'} · ${clock(length)} · exported ${date}`;
+    const file =
+      format === 'docx'
+        ? new Blob([docxFile(name, subtitle, blocks) as BlobPart], { type: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document' })
+        : new Blob([format === 'txt' ? transcriptTxt(name, subtitle, blocks) : format === 'srt' ? transcriptSrt(blocks) : transcriptVtt(blocks)], {
+            type: format === 'vtt' ? 'text/vtt' : 'text/plain',
+          });
+    download(file, `${name}-transcript.${format}`);
+    set({ message: 'Transcript exported' });
+  },
+
   applyEdit(segments) {
     const { recording } = get();
     if (recording) commit(set, get, { segments });
@@ -918,7 +998,7 @@ export const useStore = create<State>((set, get) => ({
     await runExport(renderEdit(tracks, recording.segments, rate), rate, format, `${recording.name}-edited`);
   },
 
-  ...createMainSlice(set, get, { persistProject, flushSave, resetSession, fresh: FRESH, runExport, download }),
+  ...createMainSlice(set, get, { persistProject, flushSave, resetSession, fresh: FRESH, runExport }),
 }));
 
 /** Encode rendered audio in the export worker and download it as `name` plus the format's extension. */

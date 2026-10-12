@@ -31,6 +31,7 @@ import { editedPieces, tickStep, type ZoomView } from '../engine/view';
 import { mainOf } from '../state/mainSlice';
 import { media } from '../state/media';
 import { useStore } from '../state/store';
+import { combo } from './keys';
 import { KIND_LABEL } from './kinds';
 import { KindIcon } from './Sidebar';
 import { Overview } from './Timeline';
@@ -710,6 +711,12 @@ function ClipMenuPop({ menu, c, close }: { menu: ClipMenu; c: Placed; close: () 
         st.selectClip(c.id);
         requestAnimationFrame(() => document.querySelector<HTMLInputElement>('.inspector .insp-vol input')?.focus());
       })}
+      {/* voice-over and interview share the running order, so moving between them only changes the lane */}
+      {isSpeech(c.kind) &&
+        item(`Move to ${KIND_LABEL[c.kind === 'interview' ? 'voiceover' : 'interview']}`, () =>
+          st.updateClip(c.id, { kind: c.kind === 'interview' ? 'voiceover' : 'interview' }),
+        )}
+      {item('Remove clip', () => st.removeClip(c.id), combo('del'))}
     </div>
   );
 }

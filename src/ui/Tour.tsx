@@ -67,7 +67,7 @@ const STEPS: Record<TourSection, Step[]> = {
       title: 'Mark what matters',
       body: (
         <>
-          Select words and press <kbd>1</kbd> to <kbd>6</kbd> to highlight them in a colour. Highlights lists every marked passage, so the good bits are easy to find again.
+          Select words and press <kbd>1</kbd> to <kbd>4</kbd> to highlight them in a colour. Highlights lists every marked passage, so the good bits are easy to find again.
         </>
       ),
     },

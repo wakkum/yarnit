@@ -16,9 +16,9 @@ const colorsOf = (hs: Highlight[]) => Object.fromEntries(wordColors(words, hs));
 
 describe('applyHighlight', () => {
   it('adds a span and replaces whatever it overlaps', () => {
-    let hs = applyHighlight([], 0, 4.6, 'red');
+    let hs = applyHighlight([], 0, 4.6, 'yellow');
     hs = applyHighlight(hs, 1.2, 2.2, 'blue');
-    expect(spans(hs)).toEqual(['red:0-1.2', 'blue:1.2-2.2', 'red:2.2-4.6']);
+    expect(spans(hs)).toEqual(['yellow:0-1.2', 'blue:1.2-2.2', 'yellow:2.2-4.6']);
   });
 
   it('clears with null', () => {
@@ -36,21 +36,21 @@ describe('word highlights', () => {
   });
 
   it('colours words by their midpoint', () => {
-    const hs = highlightWords([], words, ['b', 'c'], 'red');
-    expect(colorsOf(hs)).toEqual({ b: 'red', c: 'red' });
-    expect(colorsOf(highlightWords(hs, words, ['c'], 'pink'))).toEqual({ b: 'red', c: 'pink' });
+    const hs = highlightWords([], words, ['b', 'c'], 'yellow');
+    expect(colorsOf(hs)).toEqual({ b: 'yellow', c: 'yellow' });
+    expect(colorsOf(highlightWords(hs, words, ['c'], 'magenta'))).toEqual({ b: 'yellow', c: 'magenta' });
   });
 });
 
 describe('passages', () => {
-  const hs = highlightWords(highlightWords([], words, ['a', 'b'], 'red'), words, ['d', 'e'], 'red');
+  const hs = highlightWords(highlightWords([], words, ['a', 'b'], 'yellow'), words, ['d', 'e'], 'yellow');
 
   it('lists runs of same-colour kept words in playback order', () => {
     const segs = fullSegments(6);
     const p = passages(displayWords(words, segs), segs, wordColors(words, hs));
     expect(p.map((x) => [x.color, x.text])).toEqual([
-      ['red', 'a b'],
-      ['red', 'd e'],
+      ['yellow', 'a b'],
+      ['yellow', 'd e'],
     ]);
     expect(p[0].start).toBeCloseTo(0);
     expect(p[0].duration).toBeCloseTo(2.2);

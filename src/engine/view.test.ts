@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import type { DisplayWord } from './edl';
 import { displayWords, fullSegments, moveWords } from './edl';
 import type { Word } from './types';
-import { clampView, computePeaks, editedPieces, tickStep, zoomAround, movedPassages, paragraphMove, paragraphs, searchHits, toOutputSpans } from './view';
+import { clampView, computePeaks, nextStop, editedPieces, tickStep, zoomAround, movedPassages, paragraphMove, paragraphs, searchHits, toOutputSpans } from './view';
 
 const dw = (text: string, start: number, opts: Partial<DisplayWord['word']> & { deleted?: boolean } = {}): DisplayWord => {
   const { deleted = false, ...rest } = opts;
@@ -137,5 +137,16 @@ describe('zoom', () => {
     expect(tickStep(47)).toBe(10);
     expect(tickStep(12)).toBe(2);
     expect(tickStep(3)).toBe(0.5);
+  });
+});
+
+describe('nextStop', () => {
+  const starts = [0.5, 1.2, 3, 2.1];
+  it('finds the next and previous word start', () => {
+    expect(nextStop(starts, 1.2, 1)).toBe(2.1);
+    expect(nextStop(starts, 1.21, -1)).toBe(0.5);
+    expect(nextStop(starts, 1.5, -1)).toBe(1.2);
+    expect(nextStop(starts, 3, 1)).toBeNull();
+    expect(nextStop(starts, 0.4, -1)).toBeNull();
   });
 });

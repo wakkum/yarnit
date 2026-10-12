@@ -8,7 +8,9 @@
   --accent: #2f6fde;
   --sel: #cfe0ff;
   --sel-fg: inherit;
-  --hit: #ffe9a8;
+  /* selected words: solid, so a selection never looks like a (blue) highlight */
+  --wsel: #2f6fde;
+  --wsel-fg: #fff;
   --hit-active: #ffb938;
   --hit-active-fg: #1c1b1a;
   --cur: #2f6fde;
@@ -18,14 +20,12 @@
   --sp2: #c2620f;
   --sp3: #2e8b57;
   --sp4: #8a4fd1;
-  --hl-red: #e5484d;
-  --hl-orange: #f76b15;
+  --hl-yellow: #ffd60a;
   --hl-green: #30a46c;
   --hl-blue: #3e8ef7;
-  --hl-purple: #8e4ec6;
-  --hl-pink: #e93d82;
-  /* how strong the marker stroke is */
-  --hl-mix: 40%;
+  --hl-magenta: #d6409f;
+  /* how strong a highlight is behind the text */
+  --hl-mix: 38%;
   font-family: Inter, system-ui, -apple-system, sans-serif;
   color-scheme: light;
 }
@@ -40,7 +40,8 @@
     --accent: #6b9bff;
     --sel: #3d6ee0;
     --sel-fg: #fff;
-    --hit: rgba(255, 196, 61, 0.26);
+    --wsel: #3d6ee0;
+    --wsel-fg: #fff;
     --hit-active: #ffc43d;
     --hit-active-fg: #161512;
     --cur: #8fb4ff;
@@ -63,7 +64,8 @@
   --accent: #6b9bff;
   --sel: #3d6ee0;
   --sel-fg: #fff;
-  --hit: rgba(255, 196, 61, 0.26);
+  --wsel: #3d6ee0;
+  --wsel-fg: #fff;
   --hit-active: #ffc43d;
   --hit-active-fg: #161512;
   --cur: #8fb4ff;
@@ -142,9 +144,9 @@ select { background: var(--panel); border: 1px solid var(--line); border-radius:
 .w:hover { background: var(--bg); box-shadow: inset 0 0 0 1px var(--line); }
 .w.fill { font-style: italic; }
 .w.del { text-decoration: line-through; color: var(--muted); opacity: 0.7; cursor: default; }
-.w.hit { background: var(--hit); }
+.w.hit { box-shadow: inset 0 0 0 1.5px var(--hit-active); }
 .w.hit-active { background: var(--hit-active); color: var(--hit-active-fg); box-shadow: 0 0 0 2px var(--hit-active); }
-.w.sel, .gap.sel { background: var(--sel); color: var(--sel-fg); }
+.w.sel, .gap.sel { background: var(--wsel); color: var(--wsel-fg); }
 .w.sel { border-radius: 0; }
 .w.sel.sel-first { border-radius: 4px 0 0 4px; }
 .w.sel.sel-last { border-radius: 0 4px 4px 0; }
@@ -152,14 +154,16 @@ select { background: var(--panel); border: 1px solid var(--line); border-radius:
 .w.cur { box-shadow: inset 0 -3px 0 var(--cur); }
 .w.clip { outline: 1.5px dashed var(--accent); outline-offset: 1px; opacity: 0.75; }
 
-/* colour highlights: a marker stroke over the lower half of the line, so it never looks like the solid selection */
-.hl-red { --c: var(--hl-red); }
-.hl-orange { --c: var(--hl-orange); }
+/* colour highlights: four colours behind the whole word (reviewer, 12 Oct 2026) */
+.hl-yellow { --c: var(--hl-yellow); }
 .hl-green { --c: var(--hl-green); }
 .hl-blue { --c: var(--hl-blue); }
-.hl-purple { --c: var(--hl-purple); }
-.hl-pink { --c: var(--hl-pink); }
-.w.hl, .gap.hl { background: linear-gradient(transparent 52%, color-mix(in srgb, var(--c) var(--hl-mix), transparent) 52%); border-radius: 0; }
+.hl-magenta { --c: var(--hl-magenta); }
+.w.hl, .gap.hl { background: color-mix(in srgb, var(--c) var(--hl-mix), transparent); border-radius: 0; }
+/* a selection or the current search hit shows on top of a highlight, so you always see what is selected */
+.w.hl.sel, .gap.hl.sel { background: var(--wsel); color: var(--wsel-fg); }
+.w.hl.hit-active { background: var(--hit-active); color: var(--hit-active-fg); }
+.w.hl.hit { box-shadow: inset 0 0 0 1.5px var(--hit-active); }
 .hl-strip { position: absolute; top: 2px; height: 5px; border-radius: 2px; background: var(--c); pointer-events: none; }
 .swatch { width: 16px; height: 16px; border-radius: 50%; padding: 0 !important; background: var(--c) !important; border: 2px solid var(--panel) !important; box-shadow: 0 0 0 1px var(--line); flex: none; }
 .selbar .swatch { margin: 0 3px; align-self: center; }
@@ -503,7 +507,7 @@ kbd { font: 12px ui-monospace, monospace; border: 1px solid var(--line); border-
 .send-menu .menu-list { width: 300px; }
 .send-menu .menu-list button { display: flex; align-items: center; gap: 8px; }
 .send-menu .menu-list button small { margin-left: auto; }
-.send-menu .menu-list .sec { font-size: 11px; color: var(--muted); padding: 8px 10px 2px; }
+.menu-list .sec { font-size: 11px; color: var(--muted); padding: 8px 10px 2px; }
 .send-menu .dot { width: 9px; height: 9px; border-radius: 50%; flex: none; }
 .send-note { margin: 6px 8px 4px; font-size: 11px; color: var(--muted); line-height: 1.4; }
 .clip-nowords { margin: 0 0 12px 104px; font-size: 13px; }

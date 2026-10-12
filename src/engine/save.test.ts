@@ -4,6 +4,7 @@ import {
   fromSavedProject,
   guessKind,
   fromSavedRecording,
+  readColor,
   migrateV1,
   SAVE_VERSION,
   summarizeProject,
@@ -26,8 +27,8 @@ const recording: Recording = {
     { id: 's1', start: 0, end: 4 },
     { id: 's2', start: 6, end: 10 },
   ],
-  highlights: [{ id: 'h1', color: 'red', start: 0.5, end: 0.9 }],
-  highlightNames: { red: 'Must keep' },
+  highlights: [{ id: 'h1', color: 'yellow', start: 0.5, end: 0.9 }],
+  highlightNames: { yellow: 'Must keep' },
   parts: [{ id: 'pt1', name: 'Intro', color: 'blue', start: 1, end: 3 }],
 };
 
@@ -55,13 +56,28 @@ describe('recordings', () => {
   });
 
   it('drop broken parts and keep the rest sorted', () => {
-    const parts = [{ id: 'b', name: 'B', color: 'red', start: 5, end: 6 }, { id: 'x', name: 'X', color: 'teal', start: 0, end: 1 }, { id: 'y', name: 'Y', color: 'red', start: 4, end: 4 }, ...recording.parts];
+    const parts = [{ id: 'b', name: 'B', color: 'yellow', start: 5, end: 6 }, { id: 'x', name: 'X', color: 'teal', start: 0, end: 1 }, { id: 'y', name: 'Y', color: 'yellow', start: 4, end: 4 }, ...recording.parts];
     expect(fromSavedRecording(toSavedRecording({ ...recording, parts } as Recording, true, 1))?.recording.parts.map((x) => x.id)).toEqual(['pt1', 'b']);
   });
 
   it('drop highlights with an unknown colour', () => {
     const odd = { ...recording, highlights: [...recording.highlights, { id: 'h2', color: 'teal', start: 1, end: 2 }] };
     expect(fromSavedRecording(toSavedRecording(odd as Recording, true, 1))?.recording.highlights).toEqual(recording.highlights);
+  });
+
+  it('convert the six colours of older saves to the four', () => {
+    const old = {
+      ...recording,
+      highlights: ['red', 'orange', 'green', 'blue', 'purple', 'pink'].map((color, i) => ({ id: `h${i}`, color, start: i, end: i + 0.5 })),
+      highlightNames: { red: 'Must keep', pink: 'Maybe', orange: 'Funny' },
+      parts: [{ id: 'p', name: 'P', color: 'purple', start: 1, end: 2 }],
+    };
+    const back = fromSavedRecording(toSavedRecording(old as unknown as Recording, true, 1))!.recording;
+    expect(back.highlights.map((h) => h.color)).toEqual(['magenta', 'yellow', 'green', 'blue', 'magenta', 'magenta']);
+    // two old names on one new colour: the first wins
+    expect(back.highlightNames).toEqual({ magenta: 'Must keep', yellow: 'Funny' });
+    expect(back.parts[0].color).toBe('magenta');
+    expect(readColor('teal')).toBeNull();
   });
 
   it('summarize the edit length and counts', () => {
